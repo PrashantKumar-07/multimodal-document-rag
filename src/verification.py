@@ -5,7 +5,7 @@ from decimal import Decimal
 import re
 
 from .models import NumericClaim, RetrievedEvidence, VisualObservation
-from .text_utils import context_tokens, decimal_key, extract_numeric_spans
+from .text_utils import context_tokens, decimal_key, extract_numeric_spans, is_structural_number
 
 UNIT_SCALES = {
     "thousand": Decimal("1000"),
@@ -71,6 +71,8 @@ def verify_numeric_claims(
 
     claims: list[NumericClaim] = []
     for raw, value, start, end in extract_numeric_spans(answer):
+        if is_structural_number(answer, raw, start, end):
+            continue
         key = decimal_key(value)
         claim_words = context_tokens(answer, start, end)
         matches = candidates.get(key or "", [])

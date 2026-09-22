@@ -77,13 +77,27 @@ class DocumentRAGPipeline:
         return parsed_documents
 
     def retrieve(
-        self, question: str, *, mode: str = "hybrid_rerank"
+        self,
+        question: str,
+        *,
+        mode: str = "hybrid_rerank",
+        document_ids: set[str] | None = None,
     ) -> tuple[list[RetrievedEvidence], dict[str, float]]:
         if self.retriever is None:
             raise RuntimeError("Index documents before asking a question.")
         if not question.strip():
             raise ValueError("Enter a question.")
-        return self.retriever.search(question.strip(), mode=mode)
+        selected_names = [
+            document.document_name
+            for document in self.documents
+            if document_ids is None or document.document_id in document_ids
+        ]
+        return self.retriever.search(
+            question.strip(),
+            mode=mode,
+            allowed_document_ids=document_ids,
+            document_names=selected_names,
+        )
 
     def _page_images(
         self, question: str, evidence: list[RetrievedEvidence]
@@ -126,8 +140,9 @@ class DocumentRAGPipeline:
         self,
         question: str,
         provider: OpenAICompatibleProvider | None = None,
+        document_ids: set[str] | None = None,
     ) -> AnswerResult:
-        evidence, timings = self.retrieve(question)
+        evidence, timings = self.retrieve(question, document_ids=document_ids)
         if provider is None:
             return AnswerResult(
                 answer="No generation provider is configured. The best matching evidence is shown below.",
@@ -138,11 +153,12 @@ class DocumentRAGPipeline:
                 timings=timings,
             )
 
+        generation_evidence = evidence[:5]
         images_started = perf_counter()
-        page_images = self._page_images(question, evidence)
+        page_images = self._page_images(question, generation_evidence)
         timings["page_render_seconds"] = perf_counter() - images_started
         try:
-            result = provider.generate(question, evidence, page_images)
+            result = provider.generate(question, generation_evidence, page_images)
         except Exception as exc:
             return AnswerResult(
                 answer="The generation provider failed. The retrieved evidence is still available below.",
@@ -155,11 +171,18 @@ class DocumentRAGPipeline:
                 timings=timings,
                 parse_warning=f"Provider error: {_safe_provider_error(exc)}",
             )
+        generation_evidence = result.evidence
+        result.evidence = evidence
         result.timings = {**timings, **result.timings}
         if result.parse_warning:
             result.numeric_claims = verify_numeric_claims(result.answer, [], [])
         else:
+            cited_evidence = [
+                item for item in generation_evidence if item.evidence_id in result.used_evidence_ids
+            ]
             result.numeric_claims = verify_numeric_claims(
-                result.answer, result.evidence, result.visual_observations
+                result.answer,
+                cited_evidence or generation_evidence,
+                result.visual_observations,
             )
         return result

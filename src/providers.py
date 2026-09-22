@@ -68,7 +68,7 @@ def _evidence_prompt(evidence: list[RetrievedEvidence]) -> str:
         chunk = item.chunk
         sections.append(
             f"[{item.evidence_id}] document={chunk.document_name!r}; page={chunk.page_number}; "
-            f"modality={chunk.modality}\n{chunk.text[:4000]}"
+            f"modality={chunk.modality}\n{chunk.text[:2600]}"
         )
     return "\n\n".join(sections)
 
@@ -79,7 +79,10 @@ Rules:
 2. Cite every factual sentence with one or more evidence labels such as [E1]. Never invent labels.
 3. Preserve numerical values and source units exactly. Do not calculate new values or infer missing values.
 4. Images are rendered source pages. Record every number read from an image in visual_observations.
-5. Return only a JSON object with keys: answer, used_evidence_ids, visual_observations, insufficient_evidence.
+5. Answer the exact question directly and concisely. Do not substitute the method, result, or conclusion
+   of a different document. Keep evidence from different documents distinct.
+6. Labels such as "Approach 1", "Figure 3", and numbered list items are identifiers, not quantitative claims.
+7. Return only a JSON object with keys: answer, used_evidence_ids, visual_observations, insufficient_evidence.
 visual_observations is an array of objects with evidence_id, metric, value, unit, label, page_number, document_name.
 """
 
@@ -149,6 +152,11 @@ class OpenAICompatibleProvider:
         used_ids = [
             str(item) for item in payload.get("used_evidence_ids", []) if str(item) in valid_ids
         ]
+        answer = str(payload["answer"])
+        cited_ids = [item for item in re.findall(r"\[(E\d+)\]", answer) if item in valid_ids]
+        used_ids = list(dict.fromkeys([*used_ids, *cited_ids]))
+        if used_ids and not cited_ids:
+            answer = f"{answer.rstrip()}\n\nSources: {' '.join(f'[{item}]' for item in used_ids[:3])}"
         observations: list[VisualObservation] = []
         for value in payload.get("visual_observations", []):
             if not isinstance(value, dict) or str(value.get("evidence_id", "")) not in valid_ids:
@@ -169,7 +177,7 @@ class OpenAICompatibleProvider:
                 )
             )
         return AnswerResult(
-            answer=str(payload["answer"]),
+            answer=answer,
             used_evidence_ids=used_ids,
             visual_observations=observations,
             insufficient_evidence=bool(payload.get("insufficient_evidence", False)),

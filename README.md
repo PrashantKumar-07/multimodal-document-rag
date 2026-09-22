@@ -11,6 +11,7 @@ There is deliberately no product or brand name. The repository describes what th
 - Query-time page rendering for chart and figure questions rather than expensive image preprocessing of every page.
 - One OpenAI-compatible multimodal adapter for OpenRouter, Ollama, and OpenAI.
 - Inline evidence IDs, rendered source pages, and conservative numeric verification.
+- An explicit active-document scope, so phrases such as “this paper” cannot silently pull an answer from another uploaded PDF.
 - Evidence-only operation when no generation provider is configured.
 - A 16-question finance/science evaluation with dense, hybrid, and reranked retrieval ablations.
 
@@ -32,6 +33,8 @@ PDF bytes
 ```
 
 Retrieval never requires a paid service. Hosted generation sends only the question, selected evidence text, and at most two selected page images to the provider chosen by the user.
+
+When several PDFs are indexed, the most recently added document becomes the active source. Select **All indexed documents — comparison mode** only for questions that identify or compare their sources; the interface rejects ambiguous phrases such as “this paper” in that mode.
 
 ## Local setup
 

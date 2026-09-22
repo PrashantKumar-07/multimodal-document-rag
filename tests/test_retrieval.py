@@ -39,6 +39,14 @@ def chunk(index: int, text: str, modality: str = "prose") -> DocumentChunk:
     )
 
 
+def other_chunk(index: int, text: str) -> DocumentChunk:
+    item = chunk(index, text)
+    item.document_id = "other"
+    item.document_name = "other-paper.pdf"
+    item.chunk_id = f"other:p{index}:prose:0"
+    return item
+
+
 def test_hybrid_search_returns_stable_evidence_ids_and_expected_page() -> None:
     retriever = HybridRetriever(
         [
@@ -66,3 +74,36 @@ def test_page_diversity_caps_three_chunks_per_page() -> None:
     )
     evidence, _ = retriever.search("revenue", top_k=6)
     assert sum(item.chunk.page_number == 1 for item in evidence) <= 3
+
+
+def test_search_respects_selected_document_scope() -> None:
+    retriever = HybridRetriever(
+        [
+            chunk(1, "The proposed method uses attention sinks and a rolling KV cache."),
+            other_chunk(1, "The proposed method fits compute-optimal scaling laws."),
+        ],
+        embedder=FakeEmbedder(),
+        reranker=FakeReranker(),
+        enable_reranker=True,
+    )
+    evidence, _ = retriever.search(
+        "What is the core methodology?",
+        allowed_document_ids={"doc"},
+        document_names=["streaming-language-models.pdf"],
+    )
+    assert evidence
+    assert {item.chunk.document_id for item in evidence} == {"doc"}
+
+
+def test_generic_method_question_prefers_explicit_key_idea() -> None:
+    retriever = HybridRetriever(
+        [
+            chunk(1, "Thanks for listening. We propose a useful language model system."),
+            chunk(2, "Objective: support long streams. Key Idea: preserve attention sink tokens with a rolling KV cache."),
+        ],
+        embedder=FakeEmbedder(),
+        reranker=FakeReranker(),
+        enable_reranker=True,
+    )
+    evidence, _ = retriever.search("What is the core methodology used in this paper?", top_k=2)
+    assert evidence[0].chunk.page_number == 2

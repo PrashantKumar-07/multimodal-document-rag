@@ -69,3 +69,13 @@ def test_document_level_table_units_are_applied_to_amounts() -> None:
     )
     assert claims[0].normalized_value == "416161000000"
     assert claims[0].status == "verified"
+
+
+def test_structural_identifiers_are_not_numeric_claims() -> None:
+    claims = verify_numeric_claims(
+        "The paper presents Approach 1–3 and Figure 2, then trains a 70B model [E1].",
+        [evidence("The proposed model contains 70B parameters")],
+        [],
+    )
+    assert [claim.original for claim in claims] == ["70B"]
+    assert claims[0].status == "verified"

@@ -140,3 +140,46 @@ def is_numeric_query(question: str) -> bool:
 def is_visual_query(question: str) -> bool:
     lowered = question.lower()
     return any(term in lowered for term in ("chart", "figure", "plot", "graph", "visual", "trend", "curve"))
+
+
+def is_method_query(question: str) -> bool:
+    lowered = question.lower()
+    return any(
+        term in lowered
+        for term in ("method", "methodology", "approach", "how does", "how do", "how it works")
+    )
+
+
+def expand_retrieval_query(question: str, document_names: list[str] | None = None) -> str:
+    """Add intent terms for underspecified research questions without changing the user prompt."""
+    lowered = question.lower()
+    additions: list[str] = []
+    if any(term in lowered for term in ("methodology", "method used", "core method", "approach used")):
+        additions.extend(["proposed method", "main contribution", "objective", "key idea", "approach", "how it works", "ours"])
+    if any(term in lowered for term in ("main idea", "core idea", "summarize", "summary")):
+        additions.extend(["abstract", "main contribution", "conclusion", "proposed approach"])
+    if document_names:
+        additions.extend(
+            re.sub(r"[_-]+", " ", name.rsplit(".", 1)[0]) for name in document_names
+        )
+    return " ".join([question, *additions]).strip()
+
+
+def is_structural_number(text: str, raw: str, start: int, end: int) -> bool:
+    """Return true for list/section identifiers that are not factual numeric claims."""
+    prefix = text[max(0, start - 28) : start].lower()
+    suffix = text[end : min(len(text), end + 12)].lower()
+    structural_prefixes = (
+        "approach", "appendix", "chapter", "equation", "eq.", "figure", "fig.",
+        "item", "method", "part", "phase", "section", "step", "table",
+    )
+    if any(re.search(rf"\b{re.escape(label)}\s*$", prefix) for label in structural_prefixes):
+        return True
+    compact = raw.strip()
+    if compact.endswith(")") and re.fullmatch(r"\d+\)", compact):
+        return True
+    if re.fullmatch(r"\d+", compact) and (suffix.lstrip().startswith(("-", "–", "—"))):
+        return True
+    if re.fullmatch(r"\d+", compact) and prefix.rstrip().endswith(("-", "–", "—")):
+        return True
+    return False

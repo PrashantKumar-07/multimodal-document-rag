@@ -64,3 +64,16 @@ def test_provider_uses_multimodal_message_and_validates_evidence_ids() -> None:
     assert result.used_evidence_ids == ["E1"]
     user_content = fake.chat.completions.request["messages"][1]["content"]
     assert any(part["type"] == "image_url" for part in user_content)
+
+
+def test_provider_adds_visible_sources_when_model_omits_inline_citation() -> None:
+    fake = FakeClient(
+        '{"answer":"The model has 70B parameters.","used_evidence_ids":["E1"],'
+        '"visual_observations":[],"insufficient_evidence":false}'
+    )
+    provider = OpenAICompatibleProvider(
+        ProviderConfig.for_provider("OpenRouter", api_key="test"),
+        client_factory=lambda **kwargs: fake,
+    )
+    result = provider.generate("How large?", [item()], [])
+    assert result.answer.endswith("Sources: [E1]")

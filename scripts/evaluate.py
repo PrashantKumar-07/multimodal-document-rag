@@ -56,9 +56,11 @@ def main() -> None:
         for question in questions:
             if not question["answerable"]:
                 continue
-            evidence, timings = pipeline.retrieve(question["question"], mode=mode)
-            latencies.append(timings["total_retrieval_seconds"])
             expected_document = document_ids[question["document_id"]]
+            evidence, timings = pipeline.retrieve(
+                question["question"], mode=mode, document_ids={expected_document}
+            )
+            latencies.append(timings["total_retrieval_seconds"])
             matching_ranks = [
                 rank
                 for rank, item in enumerate(evidence[:5], start=1)
@@ -90,11 +92,13 @@ def main() -> None:
         unsupported = 0
         total_claims = 0
         for question in questions:
-            result = pipeline.answer(question["question"], provider)
+            expected_document = document_ids[question["document_id"]]
+            result = pipeline.answer(
+                question["question"], provider, document_ids={expected_document}
+            )
             if not question["answerable"]:
                 refusal_hits.append(float(result.insufficient_evidence))
                 continue
-            expected_document = document_ids[question["document_id"]]
             cited = [item for item in result.evidence if item.evidence_id in result.used_evidence_ids]
             citation_hits.append(
                 float(
