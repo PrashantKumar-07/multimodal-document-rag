@@ -1,0 +1,162 @@
+[
+  {
+    "id": "prose-1",
+    "category": "prose",
+    "question": "How should model size and training-token count scale as the compute budget increases?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": 1,
+    "expected_answer": "They should be scaled in equal proportions.",
+    "numeric_values": [],
+    "answerable": true
+  },
+  {
+    "id": "prose-2",
+    "category": "prose",
+    "question": "Why does Chinchilla's smaller model size help downstream use?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": 1,
+    "expected_answer": "It reduces memory footprint and inference cost.",
+    "numeric_values": [],
+    "answerable": true
+  },
+  {
+    "id": "prose-3",
+    "category": "prose",
+    "question": "Why does Apple present results excluding the State Aid decision's impact?",
+    "document_id": "apple-fy2025-q4",
+    "gold_page": 4,
+    "expected_answer": "It provides supplemental information indicative of core operating results and helps period comparisons.",
+    "numeric_values": [],
+    "answerable": true
+  },
+  {
+    "id": "prose-4",
+    "category": "prose",
+    "question": "What event caused Apple's one-time income tax charge in fiscal 2024?",
+    "document_id": "apple-fy2025-q4",
+    "gold_page": 4,
+    "expected_answer": "The European Court of Justice confirmed the European Commission's 2016 State Aid decision.",
+    "numeric_values": ["2016"],
+    "answerable": true
+  },
+  {
+    "id": "table-1",
+    "category": "table",
+    "question": "What were Apple's total net sales for the twelve months ended September 27, 2025?",
+    "document_id": "apple-fy2025-q4",
+    "gold_page": 1,
+    "expected_answer": "$416,161 million",
+    "numeric_values": ["416161"],
+    "answerable": true
+  },
+  {
+    "id": "table-2",
+    "category": "table",
+    "question": "How much cash and cash equivalents did Apple report on September 27, 2025?",
+    "document_id": "apple-fy2025-q4",
+    "gold_page": 2,
+    "expected_answer": "$35,934 million",
+    "numeric_values": ["35934"],
+    "answerable": true
+  },
+  {
+    "id": "table-3",
+    "category": "table",
+    "question": "How much cash did Apple generate from operating activities in fiscal 2025?",
+    "document_id": "apple-fy2025-q4",
+    "gold_page": 3,
+    "expected_answer": "$111,482 million",
+    "numeric_values": ["111482"],
+    "answerable": true
+  },
+  {
+    "id": "table-4",
+    "category": "table",
+    "question": "According to Table 1, how large is Chinchilla and how many training tokens did it use?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": 3,
+    "expected_answer": "70 billion parameters and 1.4 trillion training tokens",
+    "numeric_values": ["70000000000", "1400000000000"],
+    "answerable": true
+  },
+  {
+    "id": "visual-1",
+    "category": "visual",
+    "question": "In Figure 1, which existing model in the legend has the largest parameter count?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": 2,
+    "expected_answer": "Megatron-Turing NLG at 530 billion parameters",
+    "numeric_values": ["530000000000"],
+    "answerable": true
+  },
+  {
+    "id": "visual-2",
+    "category": "visual",
+    "question": "What Gopher training-compute budget is marked in the caption of Figure 2?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": 5,
+    "expected_answer": "5.76 × 10^23 FLOPs",
+    "numeric_values": ["5.76", "10", "23"],
+    "answerable": true
+  },
+  {
+    "id": "visual-3",
+    "category": "visual",
+    "question": "What do the valleys in the left panel of Figure 3 identify?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": 6,
+    "expected_answer": "The loss-minimizing model size for each compute budget.",
+    "numeric_values": [],
+    "answerable": true
+  },
+  {
+    "id": "visual-4",
+    "category": "visual",
+    "question": "In Figure 4, what optimal model size is estimated for the Gopher FLOP budget?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": 7,
+    "expected_answer": "40 billion parameters",
+    "numeric_values": ["40000000000"],
+    "answerable": true
+  },
+  {
+    "id": "unanswerable-1",
+    "category": "unanswerable",
+    "question": "What were Apple's research and development expenses in fiscal 2026?",
+    "document_id": "apple-fy2025-q4",
+    "gold_page": null,
+    "expected_answer": "Not present in the document.",
+    "numeric_values": [],
+    "answerable": false
+  },
+  {
+    "id": "unanswerable-2",
+    "category": "unanswerable",
+    "question": "How many full-time employees did Apple have at the end of fiscal 2025?",
+    "document_id": "apple-fy2025-q4",
+    "gold_page": null,
+    "expected_answer": "Not present in the document.",
+    "numeric_values": [],
+    "answerable": false
+  },
+  {
+    "id": "unanswerable-3",
+    "category": "unanswerable",
+    "question": "What were the measured carbon emissions from training Chinchilla?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": null,
+    "expected_answer": "Not reported in the paper.",
+    "numeric_values": [],
+    "answerable": false
+  },
+  {
+    "id": "unanswerable-4",
+    "category": "unanswerable",
+    "question": "Under which software license were Chinchilla's model weights released?",
+    "document_id": "compute-optimal-llms",
+    "gold_page": null,
+    "expected_answer": "Not reported in the paper.",
+    "numeric_values": [],
+    "answerable": false
+  }
+]

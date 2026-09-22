@@ -1,0 +1,16 @@
+[
+  {
+    "id": "apple-fy2025-q4",
+    "label": "Apple FY2025 Q4 financial statements",
+    "filename": "apple-fy2025-q4-financial-statements.pdf",
+    "url": "https://images.apple.com/newsroom/pdfs/fy2025-q4/FY25_Q4_Consolidated_Financial_Statements.pdf",
+    "sha256": "43e7f0730b3cce0fc37301a2f43c29712bbde6ab299d97c6df345fd0c754508a"
+  },
+  {
+    "id": "compute-optimal-llms",
+    "label": "Training Compute-Optimal Large Language Models",
+    "filename": "training-compute-optimal-large-language-models.pdf",
+    "url": "https://arxiv.org/pdf/2203.15556",
+    "sha256": "3fd3632a8ef48171bd25282990221d49535d75356192f068b3b2ebe08f2aedd4"
+  }
+]
