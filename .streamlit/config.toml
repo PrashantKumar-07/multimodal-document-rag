@@ -8,7 +8,7 @@ fileWatcherType = "none"
 gatherUsageStats = false
 
 [theme]
-primaryColor = "#2563EB"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F7FB"
-textColor = "#172033"
+primaryColor = "#087C70"
+backgroundColor = "#F7F8F4"
+secondaryBackgroundColor = "#EFF6F0"
+textColor = "#10272C"

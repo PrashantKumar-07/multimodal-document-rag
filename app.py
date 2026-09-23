@@ -18,24 +18,96 @@ from src.samples import download_sample, load_manifest
 ROOT = Path(__file__).resolve().parent
 CACHE_DIR = ROOT / "cache"
 ALL_DOCUMENTS = "__all_documents__"
-st.set_page_config(page_title="Document research workspace", page_icon="◈", layout="wide")
+st.set_page_config(page_title="Document research workspace", page_icon="◈", layout="wide", initial_sidebar_state="auto")
 st.markdown("""
 <style>
-.stApp {background:#f7f8fc;color:#192944}
-[data-testid="stHeader"] {background:rgba(247,248,252,.9)}
-[data-testid="stSidebar"] {background:#fff;border-right:1px solid #e5e9f2}
-[data-testid="stMainBlockContainer"] {max-width:1190px;padding-top:2rem}
-h1,h2,h3 {letter-spacing:-.025em;color:#142745}
-.hero {background:linear-gradient(118deg,#142640,#284b7c);padding:1.8rem 2rem;border-radius:20px;color:white;margin-bottom:1.5rem}
-.hero h1 {color:white;font-size:2.2rem;margin:.25rem 0 .55rem}
-.hero p {color:#cbdcf2;margin:0;max-width:780px}
-.eyebrow {font-size:.72rem;letter-spacing:.15em;font-weight:700;text-transform:uppercase;color:#83d5ed}
-.source-link {padding:.65rem .9rem;border:1px solid #e3e8f1;border-radius:10px;background:#fff;margin:.45rem 0;font-size:.87rem}
-.st-key-answer_surface {background:#fff;border-left:4px solid #6b83e6!important;border-radius:16px!important;padding:1.6rem!important;line-height:1.75;box-shadow:0 5px 24px #18345a08}
-[data-testid="stForm"] {background:#fff;border:1px solid #e3e8f1;border-radius:16px;padding:1rem}
-[data-testid="stExpander"] {background:#fff;border-color:#e3e8f1}
-.stButton>button,.stFormSubmitButton>button {border-radius:9px;font-weight:600}
-[data-testid="stMetricValue"] {font-size:1.5rem}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+:root {--ink:#10272c;--muted:#60747a;--line:#dce7e4;--mint:#dff6ed;--teal:#087c70;--cream:#f7f8f4;--orange:#f6c98c}
+html,body,[class*="css"],.stApp {font-family:'DM Sans',Arial,sans-serif}
+.stApp {background:radial-gradient(circle at 78% -12%,#e2f2eb 0,transparent 33%),var(--cream);color:var(--ink)}
+[data-testid="stHeader"] {background:rgba(247,248,244,.87);backdrop-filter:blur(12px)}
+[data-testid="stSidebar"] {background:#102b2d;border-right:1px solid #214044}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+[data-testid="stSidebar"] label,[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] h3 {color:#f0f8f4}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {color:#b7ceca}
+[data-testid="stSidebar"] hr {border-color:#355054}
+[data-testid="stSidebar"] [data-baseweb="select"],
+[data-testid="stSidebar"] input {color:#162f32}
+[data-testid="stSidebar"] .stButton button p {color:#173639!important}
+[data-testid="stSidebar"] .stButton button:disabled p {color:#6c8582!important}
+[data-testid="stSidebar"] [data-testid="stAlert"] p {color:#173639}
+[data-testid="stMainBlockContainer"] {max-width:1240px;padding:2rem 2.35rem 5rem}
+.block-container {padding-bottom:5rem}
+h1,h2,h3,h4 {font-family:Manrope,'DM Sans',sans-serif;letter-spacing:-.045em;color:var(--ink)}
+h2 {font-weight:800!important}
+.brand {display:flex;align-items:center;gap:.75rem;margin:.15rem 0 1.8rem;color:#fff;font-family:Manrope,sans-serif;font-size:1.05rem;font-weight:800;letter-spacing:-.035em}
+.brand-mark {display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:#d9f4df;color:#0b5149;font-size:1.4rem;transform:rotate(-8deg)}
+.sidebar-kicker {color:#81cfc0!important;font-size:.68rem!important;font-weight:800;letter-spacing:.16em;text-transform:uppercase;margin:0 0 .35rem}
+.topline {display:flex;justify-content:space-between;align-items:center;margin:.1rem 0 1.1rem;color:#68817e;font-size:.76rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.topline .live {color:#137a70;letter-spacing:0;font-size:.77rem;text-transform:none;background:#e4f5ec;border:1px solid #cae9db;border-radius:99px;padding:.35rem .72rem}
+.hero {position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.14fr) minmax(270px,.86fr);gap:2.5rem;align-items:center;min-height:348px;padding:3rem 3.2rem;border-radius:25px;background:#102d32;color:#fff;box-shadow:0 26px 48px -28px #0d3b37a3;margin-bottom:2rem}
+.hero:before {content:'';position:absolute;width:470px;height:470px;border:1px solid #ffffff19;border-radius:50%;right:-118px;top:-180px;box-shadow:0 0 0 70px #ffffff08,0 0 0 140px #ffffff04}
+.hero-copy,.hero-art {position:relative;z-index:1}
+.hero h1 {color:#fff;font-size:clamp(2.25rem,4vw,3.6rem);line-height:1.13;font-weight:800;margin:.65rem 0 1rem;max-width:740px}
+.hero h1 em {font-style:normal;color:#a5e4c8}
+.hero p {color:#c5dbd5;margin:0;max-width:600px;font-size:1.03rem;line-height:1.65}
+.eyebrow {font-size:.68rem;letter-spacing:.18em;font-weight:800;text-transform:uppercase;color:#8ee0c1}
+.hero-tags {display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1.45rem}
+.hero-tags span {padding:.47rem .72rem;border:1px solid #ffffff2b;border-radius:99px;color:#dceee8;font-size:.72rem;font-weight:700;background:#ffffff0b}
+.hero-art {max-width:340px;justify-self:end;width:100%;transform:rotate(3deg)}
+.art-paper {background:#f9fbf7;color:#183236;padding:1.2rem;border-radius:16px;box-shadow:0 23px 50px #021d2190}
+.art-top {display:flex;align-items:center;gap:.55rem;color:#79908c;text-transform:uppercase;font-size:.62rem;font-weight:800;letter-spacing:.1em;border-bottom:1px solid #e1ebe6;padding-bottom:.8rem}
+.art-dot {width:8px;height:8px;border-radius:50%;background:#eeaa6c}
+.art-heading {font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-.03em;font-size:.95rem;margin:1rem 0 .75rem}
+.art-line {height:8px;border-radius:8px;background:#e4ebe7;margin:.45rem 0}
+.art-line.mid {width:77%}.art-line.short {width:55%}
+.art-highlight {display:flex;justify-content:space-between;align-items:center;background:#e5f4e8;border-left:3px solid #2c9c7b;padding:.58rem .7rem;margin-top:1rem;border-radius:4px 8px 8px 4px;font-size:.75rem;font-weight:700}
+.art-highlight span {color:#1c8265}
+.section-eyebrow {font-size:.68rem;font-weight:800;letter-spacing:.16em;color:#178171;text-transform:uppercase;margin:.2rem 0 .32rem}
+.section-intro {color:var(--muted);margin:-.25rem 0 1.1rem;font-size:.96rem}
+.workspace-hero {border:1px solid #dbe7de;background:linear-gradient(112deg,#e9f6ed,#f9fbf5 65%);padding:1.5rem 1.85rem;border-radius:20px;margin-bottom:1.65rem}
+.workspace-hero h1 {font-size:clamp(1.65rem,2.5vw,2.25rem);line-height:1.2;margin:.25rem 0 .35rem}
+.workspace-hero p {color:#56736f;margin:0;font-size:.93rem}
+.workspace-hero.compact {padding:.95rem 1.3rem;margin-bottom:.8rem}
+.workspace-hero.compact h1 {font-size:1.25rem;margin:.12rem 0}
+.doc-shelf {display:flex;gap:.55rem;flex-wrap:wrap;margin:.7rem 0 1.4rem}
+.doc-pill {background:#fff;border:1px solid #d8e7de;border-radius:9px;padding:.55rem .78rem;color:#25423f;font-size:.78rem;font-weight:700;box-shadow:0 4px 13px #173d2c0a}
+.doc-pill span {color:#18846d;font-weight:800;margin-right:.35rem}
+.st-key-sample_card,.st-key-upload_card {background:#fff;border:1px solid #dce7e3!important;border-radius:18px!important;padding:1.1rem 1.25rem 1.35rem!important;min-height:245px;box-shadow:0 12px 26px #183d3209}
+.st-key-sample_card h3,.st-key-upload_card h3 {margin:.3rem 0 .5rem;font-size:1.15rem}
+.st-key-sample_card p,.st-key-upload_card p {color:#667e79}
+.st-key-sample_card [data-testid="stMultiSelect"],.st-key-upload_card [data-testid="stFileUploader"] {margin-top:.5rem}
+.st-key-question_panel {background:#fff;border:1px solid #dae7e1!important;border-radius:20px!important;padding:1.35rem 1.55rem 1.15rem!important;box-shadow:0 16px 34px #173d2b0b;margin-top:.55rem}
+.st-key-question_panel [data-testid="stForm"] {border:0;padding:0;background:transparent}
+.st-key-question_panel [data-testid="stTextArea"] textarea {border-radius:12px;background:#f8faf8;border:1px solid #d9e7df;font-size:.98rem;line-height:1.6}
+.st-key-question_panel [data-testid="stTextArea"] textarea:focus {border-color:#2d9b84;box-shadow:0 0 0 3px #2d9b841b}
+.stButton>button,.stFormSubmitButton>button,.stDownloadButton>button {border-radius:10px;font-weight:700;transition:all .18s ease}
+.stButton>button:hover,.stFormSubmitButton>button:hover,.stDownloadButton>button:hover {transform:translateY(-1px);box-shadow:0 9px 20px #144f3e1c}
+.stButton>button[kind="primary"],.stFormSubmitButton>button[kind="primary"] {background:#087c70;border-color:#087c70;color:#fff}
+.stButton>button[kind="primary"]:hover,.stFormSubmitButton>button[kind="primary"]:hover {background:#05665d;border-color:#05665d}
+button[data-testid="stBaseButton-primaryFormSubmit"] {background:#087c70;border-color:#087c70;color:#fff}
+button[data-testid="stBaseButton-primaryFormSubmit"]:hover {background:#05665d;border-color:#05665d}
+.prompt-note {font-size:.8rem;color:#79908a;margin:.4rem 0 .6rem}
+.result-head {display:flex;justify-content:space-between;align-items:end;gap:1rem;margin:2.1rem 0 .8rem}
+.result-head h2 {margin:.15rem 0 .2rem;font-size:1.65rem}
+.result-head p {margin:0;color:#66817b;font-size:.87rem}
+.result-head .asked-question {color:#254c46;font-weight:700;margin-top:.38rem;font-size:.92rem}
+.result-badge {white-space:nowrap;color:#126b5f;background:#e5f5eb;border:1px solid #cbe8d7;border-radius:99px;font-size:.75rem;font-weight:800;padding:.45rem .7rem}
+[data-baseweb="tab-list"] {gap:1.4rem;border-bottom:1px solid #d8e5de}
+button[data-baseweb="tab"] {font-weight:700;color:#5e7671;padding-left:0;padding-right:0}
+button[data-baseweb="tab"][aria-selected="true"] {color:#087c70}
+.st-key-answer_surface {background:#fff;border:1px solid #dce7e1!important;border-left:4px solid #1a947b!important;border-radius:16px!important;padding:1.6rem 1.9rem!important;line-height:1.8;box-shadow:0 14px 34px #173d2b0b}
+.st-key-answer_surface p {line-height:1.8;font-size:1rem;color:#243d3d}
+.st-key-answer_surface h3 {margin-top:1.6rem;padding-top:.2rem;color:#183a39}
+.st-key-answer_surface a {color:#087c70;font-weight:800;text-decoration:none;background:#e5f5ec;padding:.08rem .24rem;border-radius:4px}
+.source-link {padding:.72rem .9rem;border:1px solid #dce7e1;border-radius:10px;background:#fff;margin:.45rem 0;font-size:.87rem;color:#3e5a55}
+.source-link strong {color:#087c70;margin-right:.3rem}
+[data-testid="stExpander"] {background:#fff;border-color:#dae7e1;border-radius:11px}
+[data-testid="stMetric"] {background:#fff;border:1px solid #dce7e1;border-radius:12px;padding:.8rem 1rem}
+[data-testid="stMetricValue"] {font-size:1.6rem;color:#123e3a}
+@media (max-width:900px) {[data-testid="stMainBlockContainer"] {padding:1.5rem 1.15rem 4rem}.hero {grid-template-columns:1fr;padding:2rem;gap:1.4rem}.hero-art {justify-self:start;max-width:300px;transform:rotate(0)}.hero h1 {font-size:2.35rem}}
+@media (max-width:600px) {.topline .live {display:none}.hero-art {display:none}.hero {min-height:0;padding:1.65rem}.hero h1 {font-size:2rem}.result-head {align-items:start;flex-direction:column}.st-key-answer_surface {padding:1.15rem!important}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,12 +123,13 @@ def local_model_info(model: str, base_url: str) -> ModelOption:
 
 
 def reset_workspace_answer() -> None:
-    for key in ("last_result", "question_history", "past_results", "preview_source", "result_tabs"):
+    for key in ("last_result", "question_history", "past_results", "preview_source", "result_tabs", "show_ask_editor"):
         st.session_state.pop(key, None)
 
 
 def set_question(question: str) -> None:
     st.session_state["question_input"] = question
+    st.session_state["show_ask_editor"] = True
 
 
 def citation_links(answer: str) -> str:
@@ -64,6 +137,8 @@ def citation_links(answer: str) -> str:
 
 
 with st.sidebar:
+    st.markdown('<div class="brand"><span class="brand-mark">◈</span><span>Document research<br><span style="font-size:.76rem;font-weight:500;color:#a8c5bd;letter-spacing:.01em">A clearer view of complex PDFs</span></span></div>', unsafe_allow_html=True)
+    st.markdown('<p class="sidebar-kicker">Workspace settings</p>', unsafe_allow_html=True)
     st.markdown("### Answer model")
     provider_name = st.selectbox("Provider", ["Ollama", "OpenRouter", "Claude", "OpenAI"])
     defaults = ProviderConfig.for_provider(provider_name)
@@ -124,8 +199,6 @@ with st.sidebar:
                 st.code(f"ollama pull {model}", language="bash")
     elif provider_name == "OpenRouter":
         st.caption("Refresh loads currently listed free models. Availability and quotas can change.")
-    elif provider_name == "NVIDIA":
-        st.caption("Uses your NVIDIA API access and its account limits. Refresh lists supported text-generation models.")
     config = ProviderConfig.for_provider(
         provider_name, api_key=api_key, model=model or defaults.model,
         base_url=base_url, supports_images=option.vision,
@@ -154,21 +227,35 @@ with st.sidebar:
         st.caption("Text-only model: charts can be discussed from extracted text and captions; reading pixels requires a vision model.")
 
 pipeline: DocumentRAGPipeline | None = st.session_state.get("pipeline")
-st.markdown('''<div class="hero"><div class="eyebrow">A workspace for understanding documents</div>
-<h1>Read deeply. Ask precisely.</h1><p>Turn papers and reports into explanations, comparisons, and research briefs — with a source trail you can inspect.</p></div>''', unsafe_allow_html=True)
+st.markdown('<div class="topline"><span>Document intelligence / research workspace</span><span class="live">●&nbsp; Local evidence search</span></div>', unsafe_allow_html=True)
 
 if pipeline is None:
+    st.markdown('''<div class="hero">
+      <div class="hero-copy"><div class="eyebrow">Your documents, in focus</div>
+      <h1>Find the answer.<br><em>Follow the evidence.</em></h1>
+      <p>Explore dense reports and research papers with precise source pages, readable explanations, and a closer look at every number.</p>
+      <div class="hero-tags"><span>Prose + tables + figures</span><span>Page citations</span><span>Numeric checks</span></div></div>
+      <div class="hero-art" aria-hidden="true"><div class="art-paper"><div class="art-top"><i class="art-dot"></i> Research note / PDF page 04</div>
+      <div class="art-heading">Evidence behind the answer</div><div class="art-line"></div><div class="art-line mid"></div>
+      <div class="art-line"></div><div class="art-line short"></div>
+      <div class="art-highlight">◈ &nbsp;Source matched <span>✓ Verified</span></div></div></div></div>''', unsafe_allow_html=True)
+    st.markdown('<div class="section-eyebrow">01 / Build your library</div>', unsafe_allow_html=True)
     st.subheader("Choose up to three documents")
+    st.markdown('<p class="section-intro">Start with a curated example or upload a report of your own. Your evidence index stays local.</p>', unsafe_allow_html=True)
     manifest = load_manifest(ROOT / "data/sample_manifest.json")
     left, right = st.columns(2, gap="large")
     with left:
-        st.markdown("#### Explore a sample")
-        samples = st.multiselect("Curated samples", [item["label"] for item in manifest])
-        st.caption("Financial statements for numbers and tables; the Chinchilla paper for research questions.")
+        with st.container(border=True, key="sample_card"):
+            st.markdown("#### ◇ Explore a sample")
+            st.caption("A quick route into financial and scientific documents.")
+            samples = st.multiselect("Curated samples", [item["label"] for item in manifest])
+            st.caption("Apple financial statements · Chinchilla research paper")
     with right:
-        st.markdown("#### Bring your own material")
-        uploads = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
-        st.caption("Up to 50 MB and 200 pages per PDF. Scanned PDFs need OCR before upload.")
+        with st.container(border=True, key="upload_card"):
+            st.markdown("#### ↗ Bring your own material")
+            st.caption("Search a paper, annual report, or technical PDF.")
+            uploads = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
+            st.caption("PDF · up to 50 MB and 200 pages each · selectable text required")
     if st.button("Build evidence index", type="primary", disabled=not samples and not uploads):
         try:
             if len(samples) + len(uploads or []) > 3:
@@ -193,6 +280,17 @@ if pipeline is None:
     st.stop()
 
 documents = pipeline.documents
+has_result = st.session_state.get("last_result") is not None
+if has_result:
+    st.markdown('''<div class="workspace-hero compact"><div class="section-eyebrow">Research workspace</div>
+    <h1>Ask, examine, understand.</h1></div>''', unsafe_allow_html=True)
+else:
+    st.markdown('''<div class="workspace-hero"><div class="section-eyebrow">02 / Research workspace</div>
+    <h1>Ask more of your documents.</h1><p>Choose a source and ask a question. Every answer links back to the pages behind it.</p></div>''', unsafe_allow_html=True)
+st.markdown('<div class="doc-shelf">' + ''.join(
+    f'<div class="doc-pill"><span>▤</span>{html.escape(document.document_name)} · {document.page_count} pages</div>'
+    for document in documents
+) + '</div>', unsafe_allow_html=True)
 with st.sidebar:
     st.markdown("### Your documents")
     for document in documents:
@@ -213,27 +311,31 @@ if len(documents) > 1:
     scope_labels[ALL_DOCUMENTS] = "Compare all documents"
 if st.session_state.get("source_scope") not in scope_labels:
     st.session_state["source_scope"] = documents[-1].document_id
-source_col, mode_col = st.columns([1.5, 1])
-with source_col:
-    scope = st.selectbox("Read from", list(scope_labels), format_func=scope_labels.get, key="source_scope", on_change=reset_workspace_answer)
-with mode_col:
-    answer_mode = st.selectbox("Answer depth", ["Detailed", "Quick", "Research report"])
-st.caption(
-    "Research report explores subquestions and builds an outline. Two requests; the streamed draft is retained without a hidden rewrite."
-    if answer_mode == "Research report" else "Detailed explanations use focused searches and surrounding context. One generation request; page images are sent only for visual questions."
-    if answer_mode == "Detailed" else "A focused answer for a specific fact. Uses one generation request."
-)
-starter_cols = st.columns(3)
-for col, label, prompt in zip(starter_cols,
-    ["Explain the method", "Examine the evaluation", "Find limitations"],
-    ["Explain the central method, why it works, and the evidence supporting it.",
-     "Explain the evaluation setup, compare the baselines and key results, and state the conditions for those results.",
-     "What are the main limitations and unanswered questions? Distinguish stated limitations from gaps in the evidence."],
-):
-    col.button(label, on_click=set_question, args=(prompt,), use_container_width=True)
-with st.form("question_form"):
-    question = st.text_area("Your question", key="question_input", height=100, placeholder="Ask a specific question, request a comparison, or explore the paper in depth…")
-    ask = st.form_submit_button("Research and answer", type="primary", disabled=provider_name == "Ollama" and not local_ready)
+with (st.expander("Ask another question", expanded=st.session_state.get("show_ask_editor", False)) if has_result else st.container()):
+    st.markdown('<div class="section-eyebrow">03 / Your question</div>', unsafe_allow_html=True)
+    source_col, mode_col = st.columns([1.5, 1])
+    with source_col:
+        scope = st.selectbox("Read from", list(scope_labels), format_func=scope_labels.get, key="source_scope", on_change=reset_workspace_answer)
+    with mode_col:
+        answer_mode = st.selectbox("Answer depth", ["Detailed", "Quick", "Research report"])
+    st.markdown('<p class="prompt-note">' + (
+        "Research report explores subquestions and builds an outline. Two requests; the streamed draft is retained without a hidden rewrite."
+        if answer_mode == "Research report" else "Detailed explanations use focused searches and surrounding context. One generation request; page images are sent only for visual questions."
+        if answer_mode == "Detailed" else "A focused answer for a specific fact. Uses one generation request."
+    ) + '</p>', unsafe_allow_html=True)
+    if not has_result:
+        starter_cols = st.columns(3)
+        for col, label, prompt in zip(starter_cols,
+            ["Explain the method", "Examine the evaluation", "Find limitations"],
+            ["Explain the central method, why it works, and the evidence supporting it.",
+             "Explain the evaluation setup, compare the baselines and key results, and state the conditions for those results.",
+             "What are the main limitations and unanswered questions? Distinguish stated limitations from gaps in the evidence."],
+        ):
+            col.button(label, on_click=set_question, args=(prompt,), use_container_width=True)
+    with st.container(border=True, key="question_panel"):
+        with st.form("question_form"):
+            question = st.text_area("Your question", key="question_input", height=80 if has_result else 120, placeholder="Ask a specific question, request a comparison, or explore the paper in depth…")
+            ask = st.form_submit_button("Research and answer", type="primary", disabled=provider_name == "Ollama" and not local_ready)
 if ask:
     if not question.strip():
         st.error("Enter a question first.")
@@ -264,8 +366,10 @@ if ask:
                 )
                 draft.empty()
                 st.session_state["last_result"] = result
+                st.session_state["show_ask_editor"] = False
                 st.session_state["question_history"] = [*st.session_state.get("question_history", []), question][-4:]
                 status.update(label="Draft retained — check the warning" if result.draft_retained else "Answer ready" if result.generation_succeeded else "Sources ready — generation needs attention" if provider else "Sources ready", state="complete", expanded=False)
+            st.rerun()
         except Exception as exc:
             st.error(provider_error_message(exc, provider_name))
 
@@ -273,7 +377,8 @@ result = st.session_state.get("last_result")
 if result is None:
     st.stop()
 
-st.divider()
+result_state = "Answer ready" if result.generation_succeeded else "Draft needs review" if result.draft_retained else "Sources ready"
+st.markdown(f'<div class="result-head"><div><div class="section-eyebrow">04 / The findings</div><h2>Your research, with receipts.</h2><p class="asked-question">{html.escape(result.question)}</p><p>Read the answer, inspect the sources, and check the quantitative claims.</p></div><span class="result-badge">● {result_state}</span></div>', unsafe_allow_html=True)
 answer_tab, sources_tab, checks_tab, research_tab = st.tabs(
     ["Answer", f"Sources · {len(result.evidence)}", "Checks", "Research trail"],
     key="result_tabs", on_change="rerun",
