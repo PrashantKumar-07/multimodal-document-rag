@@ -36,7 +36,12 @@ html,body,[class*="css"],.stApp {font-family:'DM Sans',Arial,sans-serif}
 [data-testid="stSidebar"] input {color:#162f32}
 [data-testid="stSidebar"] .stButton button p {color:#173639!important}
 [data-testid="stSidebar"] .stButton button:disabled p {color:#6c8582!important}
-[data-testid="stSidebar"] [data-testid="stAlert"] p {color:#173639}
+[data-testid="stSidebar"] [data-testid="stAlertContainer"] {background:#edf8f0!important;border:1px solid #b8dec5;border-radius:10px}
+[data-testid="stSidebar"] [data-testid="stAlertContainer"] :is(p,span,svg) {color:#155c38!important}
+[data-testid="stSidebar"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {background:#fff0ed!important;border-color:#f1bdb8}
+[data-testid="stSidebar"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) :is(p,span,svg) {color:#8c2f33!important}
+[data-testid="stSidebar"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {background:#fff7e8!important;border-color:#e9d49d}
+[data-testid="stSidebar"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) :is(p,span,svg) {color:#765419!important}
 [data-testid="stMainBlockContainer"] {max-width:1240px;padding:2rem 2.35rem 5rem}
 .block-container {padding-bottom:5rem}
 h1,h2,h3,h4 {font-family:Manrope,'DM Sans',sans-serif;letter-spacing:-.045em;color:var(--ink)}
