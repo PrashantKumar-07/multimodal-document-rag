@@ -1,5 +1,8 @@
 [server]
 maxUploadSize = 50
+# Transformers lazy modules trigger expensive, unnecessary watcher imports.
+# Restart the app after source edits instead of using automatic hot reload.
+fileWatcherType = "none"
 
 [browser]
 gatherUsageStats = false

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 import re
 from time import perf_counter
@@ -21,16 +22,32 @@ from .text_utils import (
 
 @lru_cache(maxsize=2)
 def load_embedder(model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> Any:
+    configure_cpu()
     from sentence_transformers import SentenceTransformer
-
-    return SentenceTransformer(model_name)
+    configure_cpu()
+    return SentenceTransformer(model_name, device="cpu")
 
 
 @lru_cache(maxsize=2)
 def load_reranker(model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2") -> Any:
+    configure_cpu()
     from sentence_transformers import CrossEncoder
+    configure_cpu()
+    return CrossEncoder(model_name, device="cpu")
 
-    return CrossEncoder(model_name)
+
+def configure_cpu():
+    """Small batches slow down badly when large hosts spawn hundreds of threads."""
+    import torch
+    from threadpoolctl import threadpool_limits
+    try:
+        threads = max(1, min(16, int(os.environ.get("RAG_CPU_THREADS", "4"))))
+    except ValueError:
+        threads = 4
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    torch.set_num_threads(threads)
+    # Retain the controller so NumPy/BLAS limits apply throughout this process.
+    return threadpool_limits(limits=threads)
 
 
 def _normalise_rows(matrix: np.ndarray) -> np.ndarray:

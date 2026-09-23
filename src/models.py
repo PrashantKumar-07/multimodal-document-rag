@@ -40,6 +40,7 @@ class RetrievedEvidence:
     dense_score: float = 0.0
     fusion_score: float = 0.0
     reranker_score: float = 0.0
+    context_text: str = ""
 
     @property
     def page_key(self) -> tuple[str, int]:
@@ -84,6 +85,16 @@ class AnswerResult:
     model: str = ""
     timings: dict[str, float] = field(default_factory=dict)
     parse_warning: str | None = None
+    question: str = ""
+    answer_mode: str = "Detailed"
+    research_queries: list[str] = field(default_factory=list)
+    outline: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    citation_coverage: float = 0.0
+    follow_up_questions: list[str] = field(default_factory=list)
+    generation_succeeded: bool = False
+    draft_retained: bool = False
+    request_count: int = 0
 
 
 @dataclass(slots=True)

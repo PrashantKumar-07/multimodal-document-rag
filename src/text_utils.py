@@ -7,7 +7,7 @@ WORD_RE = re.compile(r"[a-z0-9]+(?:\.[0-9]+)?", re.IGNORECASE)
 NUMBER_RE = re.compile(
     r"(?<![A-Za-z0-9])(?:[-+]|\()?\s*[$€£₹]?\s*"
     r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*"
-    r"(?:trillion|billion|million|thousand|bn|[kmbt]|%|percent|percentage|×|x)?\s*\)?",
+    r"(?:(?:trillion|billion|million|thousand|bn|percentage|percent|[kmbt]|x)(?![a-z])|%|×)?\s*\)?",
     re.IGNORECASE,
 )
 
@@ -89,13 +89,16 @@ def decimal_key(value: Decimal | None) -> str | None:
 
 
 def extract_numeric_spans(text: str) -> list[tuple[str, Decimal | None, int, int]]:
-    clean = re.sub(r"\[E\d+\]", "", text)
+    # Mask citations without shifting character offsets used for sentence context.
+    clean = re.sub(r"\[E\d+\]", lambda m: " " * len(m.group()), text)
     spans: list[tuple[str, Decimal | None, int, int]] = []
     for match in NUMBER_RE.finditer(clean):
         raw = match.group(0).strip()
         value = parse_decimal_token(raw)
         if value is not None:
-            spans.append((raw, value, match.start(), match.end()))
+            start = match.start() + len(match.group()) - len(match.group().lstrip())
+            end = match.end() - len(match.group()) + len(match.group().rstrip())
+            spans.append((raw, value, start, end))
     return spans
 
 
@@ -176,10 +179,13 @@ def is_structural_number(text: str, raw: str, start: int, end: int) -> bool:
     if any(re.search(rf"\b{re.escape(label)}\s*$", prefix) for label in structural_prefixes):
         return True
     compact = raw.strip()
-    if compact.endswith(")") and re.fullmatch(r"\d+\)", compact):
+    # Version/dataset identifiers are labels; retain size-bearing names (70B).
+    if compact.isdigit() and re.search(r"[a-z]{2,}-$", prefix):
         return True
-    if re.fullmatch(r"\d+", compact) and (suffix.lstrip().startswith(("-", "–", "—"))):
+    line_prefix = text[text.rfind("\n", 0, start) + 1:start]
+    if not line_prefix.strip() and (compact.endswith(")") or text[end:end+1] == "."):
         return True
-    if re.fullmatch(r"\d+", compact) and prefix.rstrip().endswith(("-", "–", "—")):
+    labels = "|".join(re.escape(label) for label in structural_prefixes)
+    if re.search(rf"\b(?:{labels})\s+\d+\s*[-–—]\s*$", prefix):
         return True
     return False

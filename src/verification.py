@@ -44,29 +44,36 @@ def verify_numeric_claims(
     evidence: list[RetrievedEvidence],
     visual_observations: list[VisualObservation],
 ) -> list[NumericClaim]:
-    candidates: dict[str, list[tuple[str, set[str]]]] = defaultdict(list)
+    candidates: dict[str, list[tuple[str, set[str], str, bool]]] = defaultdict(list)
+    def unit(raw: str) -> str:
+        if "%" in raw or "percent" in raw.lower():
+            return "percent"
+        return next((symbol for symbol in "$€£₹" if symbol in raw), "")
     for item in evidence:
-        scale = _document_scale(item.chunk.text)
-        for _, value, start, end in extract_numeric_spans(item.chunk.text):
+        source_text = item.context_text or item.chunk.text
+        scale = _document_scale(source_text)
+        for raw, value, start, end in extract_numeric_spans(source_text):
+            if is_structural_number(source_text, raw, start, end):
+                continue
             key = decimal_key(value)
             if key is not None:
-                words = context_tokens(item.chunk.text, start, end)
-                candidates[key].append((item.evidence_id, words))
+                words = context_tokens(source_text, start, end)
+                candidates[key].append((item.evidence_id, words, unit(raw), False))
                 if scale is not None and value is not None and not _is_scale_exception(
-                    item.chunk.text, start, end, value
+                    source_text, start, end, value
                 ):
                     scaled_key = decimal_key(value * scale)
                     if scaled_key is not None:
-                        candidates[scaled_key].append((item.evidence_id, words))
+                        candidates[scaled_key].append((item.evidence_id, words, unit(raw), False))
     for observation in visual_observations:
         text = " ".join(
             part for part in (observation.metric, observation.label, observation.value, observation.unit) if part
         )
-        for _, value, start, end in extract_numeric_spans(text):
+        for raw, value, start, end in extract_numeric_spans(text):
             key = decimal_key(value)
             if key is not None:
                 candidates[key].append(
-                    (observation.evidence_id, context_tokens(text, start, end))
+                    (observation.evidence_id, context_tokens(text, start, end), unit(raw), True)
                 )
 
     claims: list[NumericClaim] = []
@@ -75,16 +82,31 @@ def verify_numeric_claims(
             continue
         key = decimal_key(value)
         claim_words = context_tokens(answer, start, end)
+        claim_words -= {"reported", "model", "paper", "document", "result", "results", "source", "million", "billion", "thousand"}
         matches = candidates.get(key or "", [])
-        contextual = [evidence_id for evidence_id, words in matches if claim_words & words]
+        # Match the citation attached to this sentence/table row, not another
+        # sentence's source. Decimal points are not sentence boundaries.
+        boundaries = list(re.finditer(r"(?<=[.!?])\s+(?=[A-Z])|\n", answer))
+        left = max((m.end() for m in boundaries if m.end() <= start), default=0)
+        right = min((m.start() for m in boundaries if m.start() >= end), default=len(answer))
+        sentence_ids = set(re.findall(r"\[(E\d+)\]", answer[left:right]))
+        if sentence_ids:
+            matches = [match for match in matches if match[0] in sentence_ids]
+        claim_unit = unit(raw)
+        contextual = [
+            evidence_id for evidence_id, words, source_unit, visual in matches
+            if claim_words & words and not visual
+            and (claim_unit == source_unit or not claim_unit or not source_unit)
+            and (claim_unit == "percent") == (source_unit == "percent")
+        ]
         if contextual:
             status = "verified"
             supporting = sorted(set(contextual))
             reason = "The normalized value and metric context match retrieved evidence."
         elif matches:
             status = "ambiguous"
-            supporting = sorted({evidence_id for evidence_id, _ in matches})
-            reason = "The value occurs in evidence, but the surrounding metric context does not match clearly."
+            supporting = sorted({match[0] for match in matches})
+            reason = "The value occurs, but its metric or unit is unclear, or it is only a model-read visual observation. Check the source page."
         else:
             status = "unsupported"
             supporting = []

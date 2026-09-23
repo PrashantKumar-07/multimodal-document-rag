@@ -46,7 +46,7 @@ def test_unmatched_number_is_unsupported() -> None:
     assert claims[0].status == "unsupported"
 
 
-def test_visual_observation_can_support_claim() -> None:
+def test_visual_observation_requires_review_instead_of_self_verification() -> None:
     observations = [
         VisualObservation(
             evidence_id="E2",
@@ -58,7 +58,7 @@ def test_visual_observation_can_support_claim() -> None:
         )
     ]
     claims = verify_numeric_claims("Chinchilla's MMLU accuracy was 67.5 percent [E2].", [], observations)
-    assert claims[0].status == "verified"
+    assert claims[0].status == "ambiguous"
 
 
 def test_document_level_table_units_are_applied_to_amounts() -> None:
@@ -79,3 +79,32 @@ def test_structural_identifiers_are_not_numeric_claims() -> None:
     )
     assert [claim.original for claim in claims] == ["70B"]
     assert claims[0].status == "verified"
+
+
+def test_real_ranges_and_parenthesized_values_are_not_discarded() -> None:
+    claims = verify_numeric_claims("Cache size is 100–200 tokens. The cache limit is 300).", [], [])
+    assert {claim.normalized_value for claim in claims} == {"100", "200", "300"}
+    assert all(claim.status == "unsupported" for claim in claims)
+
+
+def test_wrong_unit_and_wrong_citation_cannot_verify() -> None:
+    claims = verify_numeric_claims("Revenue grew 50% [E1].", [evidence("Revenue was $50.")], [])
+    assert claims[0].status != "verified"
+    claims = verify_numeric_claims(
+        "Revenue was 10 [E1]. Revenue was 99 [E2].",
+        [evidence("Revenue was 10 and cash was 99.", "E1"), evidence("Revenue was 12.", "E2")], [],
+    )
+    assert claims[0].status == "verified"
+    assert claims[1].status == "unsupported"
+
+
+def test_parent_page_context_is_valid_evidence() -> None:
+    item = evidence("Evaluation setup")
+    item.context_text = "The cache window is 2048 tokens for Llama models."
+    claims = verify_numeric_claims("The cache window is 2048 tokens [E1].", [item], [])
+    assert claims[0].status == "verified"
+
+
+def test_model_versions_and_dataset_ids_are_not_quantities():
+    claims = verify_numeric_claims("Llama-2-70B used PG-19 and a 2048 token cache.", [], [])
+    assert {claim.normalized_value for claim in claims} == {"70000000000", "2048"}

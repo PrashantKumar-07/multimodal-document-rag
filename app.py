@@ -3,287 +3,342 @@ from __future__ import annotations
 import html
 import os
 import re
+from dataclasses import replace
+from time import perf_counter
 from pathlib import Path
 
 import streamlit as st
 
+from src.catalog import ModelOption, discover_models, inspect_ollama, provider_error_message
 from src.pipeline import DocumentRAGPipeline
-from src.providers import OpenAICompatibleProvider, ProviderConfig
+from src.providers import OpenAICompatibleProvider, ProviderConfig, partial_answer
+from src.research import export_markdown
 from src.samples import download_sample, load_manifest
 
 ROOT = Path(__file__).resolve().parent
-MANIFEST_PATH = ROOT / "data" / "sample_manifest.json"
 CACHE_DIR = ROOT / "cache"
 ALL_DOCUMENTS = "__all_documents__"
+st.set_page_config(page_title="Document research workspace", page_icon="◈", layout="wide")
+st.markdown("""
+<style>
+.stApp {background:#f7f8fc;color:#192944}
+[data-testid="stHeader"] {background:rgba(247,248,252,.9)}
+[data-testid="stSidebar"] {background:#fff;border-right:1px solid #e5e9f2}
+[data-testid="stMainBlockContainer"] {max-width:1190px;padding-top:2rem}
+h1,h2,h3 {letter-spacing:-.025em;color:#142745}
+.hero {background:linear-gradient(118deg,#142640,#284b7c);padding:1.8rem 2rem;border-radius:20px;color:white;margin-bottom:1.5rem}
+.hero h1 {color:white;font-size:2.2rem;margin:.25rem 0 .55rem}
+.hero p {color:#cbdcf2;margin:0;max-width:780px}
+.eyebrow {font-size:.72rem;letter-spacing:.15em;font-weight:700;text-transform:uppercase;color:#83d5ed}
+.source-link {padding:.65rem .9rem;border:1px solid #e3e8f1;border-radius:10px;background:#fff;margin:.45rem 0;font-size:.87rem}
+.st-key-answer_surface {background:#fff;border-left:4px solid #6b83e6!important;border-radius:16px!important;padding:1.6rem!important;line-height:1.75;box-shadow:0 5px 24px #18345a08}
+[data-testid="stForm"] {background:#fff;border:1px solid #e3e8f1;border-radius:16px;padding:1rem}
+[data-testid="stExpander"] {background:#fff;border-color:#e3e8f1}
+.stButton>button,.stFormSubmitButton>button {border-radius:9px;font-weight:600}
+[data-testid="stMetricValue"] {font-size:1.5rem}
+</style>
+""", unsafe_allow_html=True)
 
-st.set_page_config(
-    page_title="Evidence-grounded PDF intelligence",
-    page_icon="◈",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
-st.markdown(
-    """
-    <style>
-    :root { --ink:#12233f; --muted:#61708a; --line:#e3e9f2; --accent:#5b7cfa; }
-    .stApp { background:#f5f7fb; }
-    [data-testid="stHeader"] { background:rgba(245,247,251,.85); }
-    [data-testid="stSidebar"] { background:#fbfcfe; border-right:1px solid var(--line); }
-    [data-testid="stMainBlockContainer"] { max-width:1180px; padding-top:2.2rem; }
-    h1,h2,h3 { color:var(--ink); letter-spacing:-.025em; }
-    .hero { padding:2.25rem 2.5rem; border-radius:24px; color:white;
-      background:radial-gradient(circle at 92% 12%,rgba(103,232,249,.24),transparent 28%),linear-gradient(125deg,#111f3b 0%,#213f75 58%,#315aa6 100%);
-      box-shadow:0 18px 45px rgba(23,48,91,.18); margin-bottom:1.4rem; }
-    .hero-kicker { color:#9fdcfb; font-size:.76rem; font-weight:750; letter-spacing:.14em; text-transform:uppercase; }
-    .hero h1 { color:white; font-size:clamp(2rem,4vw,3.25rem); line-height:1.03; margin:.55rem 0 .7rem; }
-    .hero p { color:#dce8fb; font-size:1.04rem; max-width:760px; margin:0; }
-    .trust-row { display:flex; flex-wrap:wrap; gap:.55rem; margin-top:1.35rem; }
-    .trust-pill { border:1px solid rgba(255,255,255,.2); background:rgba(255,255,255,.09); border-radius:999px; padding:.4rem .75rem; font-size:.78rem; color:#ecf5ff; }
-    .section-label { color:#71809a; font-size:.75rem; font-weight:750; letter-spacing:.12em; text-transform:uppercase; margin:.3rem 0 .2rem; }
-    .source-banner { background:#fff; border:1px solid var(--line); border-radius:16px; padding:.9rem 1.05rem; box-shadow:0 6px 18px rgba(25,48,85,.05); }
-    .source-banner strong { color:var(--ink); }
-    .answer-card { background:white; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:16px; padding:1.15rem 1.3rem; margin:.45rem 0 1rem; box-shadow:0 8px 25px rgba(28,52,91,.06); }
-    .badge { display:inline-block; border-radius:999px; padding:.24rem .58rem; font-size:.72rem; font-weight:750; margin-right:.35rem; }
-    .badge-prose { color:#1858a8; background:#eaf3ff; } .badge-table { color:#6f42a6; background:#f2eaff; }
-    .badge-visual { color:#9a4b10; background:#fff0df; } .badge-verified { color:#08744f; background:#e4f7ef; }
-    .badge-ambiguous { color:#8a5a00; background:#fff3d6; } .badge-unsupported { color:#a62d35; background:#fdebed; }
-    div[data-testid="stMetric"] { background:#fff; border:1px solid var(--line); padding:.75rem 1rem; border-radius:14px; }
-    div[data-testid="stForm"] { background:#fff; border:1px solid var(--line); border-radius:18px; padding:1.1rem 1.25rem; box-shadow:0 8px 25px rgba(28,52,91,.05); }
-    div[data-testid="stExpander"] { background:#fff; border-color:var(--line); border-radius:13px; }
-    .stButton>button,.stFormSubmitButton>button { border-radius:10px; min-height:2.8rem; font-weight:650; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+@st.cache_data(ttl=600, show_spinner=False)
+def model_catalog(provider: str, base_url: str) -> list[ModelOption]:
+    return discover_models(provider, base_url)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def local_model_info(model: str, base_url: str) -> ModelOption:
+    return inspect_ollama(model, base_url)
+
+
+def reset_workspace_answer() -> None:
+    for key in ("last_result", "question_history", "past_results", "preview_source", "result_tabs"):
+        st.session_state.pop(key, None)
+
+
+def set_question(question: str) -> None:
+    st.session_state["question_input"] = question
 
 
 def citation_links(answer: str) -> str:
-    return re.sub(r"\[(E\d+)\]", lambda match: f"[{match.group(1)}](#{match.group(1).lower()})", answer)
-
-
-def default_model(provider_name: str) -> str:
-    return {"OpenRouter": "openrouter/free", "Ollama": "qwen3-vl:8b", "OpenAI": "gpt-5-mini"}[provider_name]
-
-
-def clear_answer() -> None:
-    st.session_state.pop("last_result", None)
-
-
-def render_hero() -> None:
-    st.markdown(
-        """
-        <div class="hero">
-          <div class="hero-kicker">Multimodal document analysis</div>
-          <h1>Ask better questions of difficult PDFs.</h1>
-          <p>Search prose, tables, and visual pages together. Every answer stays connected to page evidence, and quantitative claims are checked before they earn a verified label.</p>
-          <div class="trust-row"><span class="trust-pill">Local retrieval</span><span class="trust-pill">Page-level citations</span><span class="trust-pill">Numeric claim checks</span><span class="trust-pill">No key required for search</span></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    return re.sub(r"\[(E\d+)\]", lambda m: f"[{m[1]}](#source-{m[1].lower()})", answer)
 
 
 with st.sidebar:
-    st.markdown("### Generation settings")
-    st.caption("Retrieval always runs locally. Add a provider only when you want a synthesized answer.")
-    provider_name = st.selectbox("Provider", ["OpenRouter", "Ollama", "OpenAI"])
-    model = st.text_input("Model", value=default_model(provider_name), key=f"model_{provider_name}")
+    st.markdown("### Answer model")
+    provider_name = st.selectbox("Provider", ["Ollama", "OpenRouter", "Claude", "OpenAI"])
+    defaults = ProviderConfig.for_provider(provider_name)
+    base_url = defaults.base_url
     if provider_name == "Ollama":
-        base_url = st.text_input("Ollama base URL", value="http://localhost:11434/v1")
+        base_url = st.text_input("Ollama server", value=base_url)
         api_key = "ollama"
-        st.info("Ollama works only when it is reachable from the machine running this app.")
     else:
-        base_url = ""
-        env_name = "OPENROUTER_API_KEY" if provider_name == "OpenRouter" else "OPENAI_API_KEY"
+        env_name = {"OpenRouter": "OPENROUTER_API_KEY", "Claude": "ANTHROPIC_API_KEY", "OpenAI": "OPENAI_API_KEY"}[provider_name]
         api_key = st.text_input(
-            "API key", value=os.environ.get(env_name, ""), type="password",
-            placeholder="Optional — leave blank for evidence search",
-            help="Kept in this Streamlit session; the application never writes or logs it.",
+            "API key", type="password", key=f"key_{provider_name}",
+            value=os.environ.get(env_name, ""), placeholder="Optional for source search",
+            help="Held in this session only. The app never writes or logs this key.",
         )
-        if api_key:
-            st.success("Answer generation enabled")
-        else:
-            st.caption("Evidence-search mode is active.")
-    show_previews = st.toggle("Show page previews", value=True)
+    catalog_key = f"catalog_{provider_name}_{base_url}"
+    refresh = st.button("Refresh available models", use_container_width=True)
+    if refresh or (provider_name in ("Ollama", "OpenRouter", "Claude") and catalog_key not in st.session_state):
+        try:
+            if refresh:
+                model_catalog.clear()
+                local_model_info.clear()
+            with st.spinner("Checking model availability…"):
+                st.session_state[catalog_key] = model_catalog(provider_name, base_url)
+        except Exception as exc:
+            st.warning(provider_error_message(exc, provider_name))
+    options = st.session_state.get(catalog_key)
+    if options is None:
+        options = [ModelOption(defaults.model, defaults.model, defaults.supports_images)]
+    if provider_name == "OpenRouter" and not st.checkbox("Show other untested models", value=False):
+        recommended = {"dots-studio/dots-3-note-preview:free", "nex-agi/nex-n2.5-mini:free"}
+        options = [x for x in options if x.id in recommended]
+    option_by_id = {option.id: option for option in options}
+    preferred = "dots-studio/dots-3-note-preview:free"
+    model_ids = list(option_by_id)
+    if provider_name == "OpenRouter" and preferred in model_ids:
+        model_ids.remove(preferred)
+        model_ids.insert(0, preferred)
+    selection = st.selectbox(
+        "Model", [*model_ids, "Custom model…"], key=f"model_selection_{provider_name}",
+        format_func=lambda x: f"{x} · vision" if x in option_by_id and option_by_id[x].vision else x,
+    )
+    if selection == "Custom model…":
+        model = st.text_input("Model ID", key=f"custom_model_{provider_name}")
+        vision = st.checkbox("This model accepts images", value=False)
+        option = ModelOption(model, model, vision)
+    else:
+        option = option_by_id[selection]
+        model = option.id
+    local_ready = True
+    if provider_name == "Ollama":
+        try:
+            option = local_model_info(model, base_url)
+            st.caption(f"Installed · {'text + images' if option.vision else 'text only'}")
+        except Exception as exc:
+            local_ready = False
+            st.warning("Select an installed model. The requested model is missing or the Ollama server is unavailable.")
+            if re.fullmatch(r"[a-zA-Z0-9._:/-]+", model or ""):
+                st.code(f"ollama pull {model}", language="bash")
+    elif provider_name == "OpenRouter":
+        st.caption("Refresh loads currently listed free models. Availability and quotas can change.")
+    elif provider_name == "NVIDIA":
+        st.caption("Uses your NVIDIA API access and its account limits. Refresh lists supported text-generation models.")
+    config = ProviderConfig.for_provider(
+        provider_name, api_key=api_key, model=model or defaults.model,
+        base_url=base_url, supports_images=option.vision,
+        context_length=min(option.context_length, 32768),
+        disable_reasoning=option.disable_reasoning,
+        json_output=option.json_output,
+    )
+    config = replace(config, request_timeout=180 if provider_name == "Ollama" else 60)
+    if provider_name in ("Claude", "OpenAI"):
+        st.caption("Direct API usage is billed by the provider; no automatic switch to this provider.")
+    if st.button("Test connection", disabled=not api_key or not model or not local_ready, use_container_width=True):
+        try:
+            with st.spinner("Testing one tiny request (8-second timeout, no retries)…"):
+                checker = OpenAICompatibleProvider(replace(config, request_timeout=8))
+                response = checker._complete([{"role": "user", "content": "Reply with OK only."}], max_tokens=128)
+                if not response.choices[0].message.content:
+                    raise ValueError("empty response")
+            st.success("Generation connection works.")
+        except Exception as exc:
+            st.error(provider_error_message(exc, provider_name))
+    if not api_key:
+        st.caption("Source search is ready without a key.")
     st.divider()
-    st.caption("Hosted providers receive your question, selected evidence text, and up to two relevant page images.")
+    st.caption("Hosted generation sends your question, selected evidence, recent question context, and up to two page images. Retrieval runs locally.")
+    if not option.vision:
+        st.caption("Text-only model: charts can be discussed from extracted text and captions; reading pixels requires a vision model.")
 
-render_hero()
 pipeline: DocumentRAGPipeline | None = st.session_state.get("pipeline")
+st.markdown('''<div class="hero"><div class="eyebrow">A workspace for understanding documents</div>
+<h1>Read deeply. Ask precisely.</h1><p>Turn papers and reports into explanations, comparisons, and research briefs — with a source trail you can inspect.</p></div>''', unsafe_allow_html=True)
 
 if pipeline is None:
-    st.markdown('<div class="section-label">Build your evidence index</div>', unsafe_allow_html=True)
     st.subheader("Choose up to three documents")
+    manifest = load_manifest(ROOT / "data/sample_manifest.json")
     left, right = st.columns(2, gap="large")
-    manifest = load_manifest(MANIFEST_PATH)
-    labels = [sample["label"] for sample in manifest]
     with left:
-        st.markdown("#### Start with a curated document")
-        st.caption("Try financial tables, scientific prose, and charts immediately.")
-        selected_labels = st.multiselect("Curated samples", labels, default=[])
+        st.markdown("#### Explore a sample")
+        samples = st.multiselect("Curated samples", [item["label"] for item in manifest])
+        st.caption("Financial statements for numbers and tables; the Chinchilla paper for research questions.")
     with right:
-        st.markdown("#### Or bring your own PDF")
-        st.caption("Digitally generated PDFs work best. OCR for scanned files is outside this version.")
-        uploads = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True, help="Maximum 50 MB and 200 pages per PDF.")
-
-    total_selected = len(selected_labels) + len(uploads or [])
-    action_col, note_col = st.columns([1, 2.2], vertical_alignment="center")
-    with action_col:
-        index_clicked = st.button("Build evidence index", type="primary", use_container_width=True, disabled=total_selected == 0)
-    with note_col:
-        st.caption("PDF text and embeddings are processed locally. Files must be unencrypted and under the stated limits.")
-
-    if index_clicked:
-        if total_selected > 3:
-            st.error("Choose no more than three PDFs in total.")
-        else:
-            try:
-                chosen: list[tuple[str, bytes]] = []
-                progress = st.progress(5, text="Preparing documents…")
-                by_label = {sample["label"]: sample for sample in manifest}
-                for label in selected_labels:
-                    chosen.append(download_sample(by_label[label], CACHE_DIR / "samples"))
-                progress.progress(30, text="Reading document structure…")
-                for upload in uploads or []:
-                    chosen.append((upload.name, upload.getvalue()))
-                built_pipeline = DocumentRAGPipeline(CACHE_DIR)
-                parsed = built_pipeline.ingest(chosen)
-                progress.progress(100, text="Evidence index ready")
-                st.session_state["pipeline"] = built_pipeline
+        st.markdown("#### Bring your own material")
+        uploads = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
+        st.caption("Up to 50 MB and 200 pages per PDF. Scanned PDFs need OCR before upload.")
+    if st.button("Build evidence index", type="primary", disabled=not samples and not uploads):
+        try:
+            if len(samples) + len(uploads or []) > 3:
+                raise ValueError("Choose no more than three PDFs.")
+            with st.status("Preparing your research workspace…", expanded=True) as status:
+                chosen = []
+                for sample in manifest:
+                    if sample["label"] in samples:
+                        st.write(f"Loading {sample['label']}")
+                        chosen.append(download_sample(sample, CACHE_DIR / "samples"))
+                chosen.extend((upload.name, upload.getvalue()) for upload in uploads or [])
+                st.write("Reading pages, tables, and visual captions; building the local search index")
+                built = DocumentRAGPipeline(CACHE_DIR)
+                parsed = built.ingest(chosen)
+                st.session_state["pipeline"] = built
                 st.session_state["source_scope"] = parsed[-1].document_id
-                clear_answer()
-                st.rerun()
-            except Exception as exc:
-                st.error(str(exc))
+                reset_workspace_answer()
+                status.update(label="Workspace ready", state="complete")
+            st.rerun()
+        except Exception as exc:
+            st.error(str(exc))
     st.stop()
 
 documents = pipeline.documents
-
 with st.sidebar:
-    st.markdown("### Current corpus")
+    st.markdown("### Your documents")
     for document in documents:
-        st.markdown(f"**{html.escape(document.document_name)}**")
-        st.caption(f"{document.page_count} pages · {len(document.chunks)} evidence records")
+        st.write(document.document_name)
+        st.caption(f"{document.page_count} pages")
     if st.button("Change documents", use_container_width=True):
         st.session_state.pop("pipeline", None)
         st.session_state.pop("source_scope", None)
-        clear_answer()
+        reset_workspace_answer()
         st.rerun()
 
-metric_cols = st.columns(3)
-metric_cols[0].metric("Documents", len(documents))
-metric_cols[1].metric("Pages indexed", sum(document.page_count for document in documents))
-metric_cols[2].metric("Evidence records", sum(len(document.chunks) for document in documents))
+for document in documents:
+    for warning in document.warnings:
+        st.warning(f"{document.document_name}: {warning}")
 
-st.markdown('<div class="section-label">Question workspace</div>', unsafe_allow_html=True)
-st.subheader("Choose the source, then ask")
-scope_options = [document.document_id for document in documents]
+scope_labels = {d.document_id: d.document_name for d in documents}
 if len(documents) > 1:
-    scope_options.append(ALL_DOCUMENTS)
-scope_labels = {document.document_id: document.document_name for document in documents} | {ALL_DOCUMENTS: "All indexed documents — comparison mode"}
-if st.session_state.get("source_scope") not in scope_options:
+    scope_labels[ALL_DOCUMENTS] = "Compare all documents"
+if st.session_state.get("source_scope") not in scope_labels:
     st.session_state["source_scope"] = documents[-1].document_id
-source_scope = st.selectbox(
-    "Active source", scope_options, format_func=lambda value: scope_labels[value], key="source_scope",
-    on_change=clear_answer, help="A single document is the safe default for questions such as ‘What method does this paper use?’",
+source_col, mode_col = st.columns([1.5, 1])
+with source_col:
+    scope = st.selectbox("Read from", list(scope_labels), format_func=scope_labels.get, key="source_scope", on_change=reset_workspace_answer)
+with mode_col:
+    answer_mode = st.selectbox("Answer depth", ["Detailed", "Quick", "Research report"])
+st.caption(
+    "Research report explores subquestions and builds an outline. Two requests; the streamed draft is retained without a hidden rewrite."
+    if answer_mode == "Research report" else "Detailed explanations use focused searches and surrounding context. One generation request; page images are sent only for visual questions."
+    if answer_mode == "Detailed" else "A focused answer for a specific fact. Uses one generation request."
 )
-selected_ids = None if source_scope == ALL_DOCUMENTS else {source_scope}
-active_label = scope_labels[source_scope]
-st.markdown(f'<div class="source-banner"><strong>Searching:</strong> {html.escape(active_label)}</div>', unsafe_allow_html=True)
-
-examples = [
-    "What is the central method proposed in this document?",
-    "What problem is the document trying to solve?",
-    "Which quantitative result best supports the main conclusion?",
-    "What does Figure 1 show?",
-]
-selected_example = st.selectbox("Prompt starter", ["Write my own question", *examples])
-with st.form("question_form", clear_on_submit=False):
-    question = st.text_area(
-        "Your question", value="" if selected_example == "Write my own question" else selected_example,
-        placeholder="Ask about a method, table value, result, figure, or limitation…", height=105,
-    )
-    ask_clicked = st.form_submit_button("Find evidence and answer", type="primary")
-
-if ask_clicked:
-    vague_cross_document = (
-        source_scope == ALL_DOCUMENTS and len(documents) > 1
-        and re.search(r"\b(?:this|the)\s+(?:paper|document|report|study)\b", question, re.IGNORECASE)
-    )
+starter_cols = st.columns(3)
+for col, label, prompt in zip(starter_cols,
+    ["Explain the method", "Examine the evaluation", "Find limitations"],
+    ["Explain the central method, why it works, and the evidence supporting it.",
+     "Explain the evaluation setup, compare the baselines and key results, and state the conditions for those results.",
+     "What are the main limitations and unanswered questions? Distinguish stated limitations from gaps in the evidence."],
+):
+    col.button(label, on_click=set_question, args=(prompt,), use_container_width=True)
+with st.form("question_form"):
+    question = st.text_area("Your question", key="question_input", height=100, placeholder="Ask a specific question, request a comparison, or explore the paper in depth…")
+    ask = st.form_submit_button("Research and answer", type="primary", disabled=provider_name == "Ollama" and not local_ready)
+if ask:
     if not question.strip():
         st.error("Enter a question first.")
-    elif vague_cross_document:
-        st.error("Choose one active source, or name the document in your question. ‘This paper’ is ambiguous across multiple PDFs.")
+    elif scope == ALL_DOCUMENTS and re.search(r"\bthis\s+(paper|document|report|study)\b", question, re.I):
+        st.error("Select one source for ‘this paper’, or explicitly ask to compare the documents.")
     else:
+        st.session_state.pop("last_result", None)
+        st.session_state.pop("preview_source", None)
+        st.session_state["result_tabs"] = "Answer"
         try:
-            provider = None
-            if provider_name == "Ollama" or api_key:
-                config = ProviderConfig.for_provider(
-                    provider_name, api_key=api_key, model=model.strip() or default_model(provider_name), base_url=base_url or None,
+            provider = OpenAICompatibleProvider(config) if api_key and model else None
+            draft = st.empty()
+            last_paint = [0.0]
+            def show_partial(raw: str) -> None:
+                now = perf_counter()
+                if now - last_paint[0] < 0.08:
+                    return
+                text = partial_answer(raw)
+                if text:
+                    draft.markdown(text + " ▍")
+                    last_paint[0] = now
+            with st.status("Researching your question…", expanded=True) as status:
+                result = pipeline.answer(
+                    question, provider, document_ids=None if scope == ALL_DOCUMENTS else {scope},
+                    answer_mode=answer_mode, history=st.session_state.get("question_history", []),
+                    on_progress=lambda message: status.update(label=message),
+                    on_partial=show_partial,
                 )
-                provider = OpenAICompatibleProvider(config)
-            with st.spinner("Ranking passages, tables, and visual pages…"):
-                st.session_state["last_result"] = pipeline.answer(question, provider, document_ids=selected_ids)
+                draft.empty()
+                st.session_state["last_result"] = result
+                st.session_state["question_history"] = [*st.session_state.get("question_history", []), question][-4:]
+                status.update(label="Draft retained — check the warning" if result.draft_retained else "Answer ready" if result.generation_succeeded else "Sources ready — generation needs attention" if provider else "Sources ready", state="complete", expanded=False)
         except Exception as exc:
-            st.error(str(exc))
+            st.error(provider_error_message(exc, provider_name))
 
 result = st.session_state.get("last_result")
-if result is not None:
-    st.divider()
-    st.markdown('<div class="section-label">Grounded response</div>', unsafe_allow_html=True)
-    st.subheader("Answer")
-    st.markdown('<div class="answer-card">', unsafe_allow_html=True)
-    if result.insufficient_evidence:
-        st.warning(citation_links(result.answer))
-    else:
-        st.markdown(citation_links(result.answer))
-    st.markdown("</div>", unsafe_allow_html=True)
+if result is None:
+    st.stop()
 
+st.divider()
+answer_tab, sources_tab, checks_tab, research_tab = st.tabs(
+    ["Answer", f"Sources · {len(result.evidence)}", "Checks", "Research trail"],
+    key="result_tabs", on_change="rerun",
+)
+with answer_tab:
+    with st.container(border=True, key="answer_surface"):
+        st.markdown(citation_links(result.answer))
     if result.parse_warning:
         st.warning(result.parse_warning)
-    if result.provider:
-        st.caption(f"Generated with {result.provider} · {result.model}")
-    else:
-        st.info("Evidence-search mode: no document content was sent to a generation provider. Add a key in the sidebar for a synthesized answer.")
+    for warning in result.warnings:
+        st.caption(warning)
+    if result.generation_succeeded:
+        st.caption(f"{result.provider} · {result.model} · {result.request_count} request(s) · {result.timings.get('total_answer_seconds', 0):.1f}s")
+    elif not result.provider:
+        st.info("Connect an answer model in the sidebar for a synthesized explanation. Sources are available now.")
+    st.download_button("Download answer with citations", export_markdown(result), file_name="document-research.md", mime="text/markdown")
+    cited = [item for item in result.evidence if item.evidence_id in result.used_evidence_ids]
+    if cited:
+        st.caption("Cited pages · open the Sources tab for passages and page previews")
+        for item in cited:
+            st.markdown(f'<div class="source-link" id="source-{item.evidence_id.lower()}"><strong>{item.evidence_id}</strong> · {html.escape(item.chunk.document_name)} · page {item.chunk.page_number}</div>', unsafe_allow_html=True)
+    if result.follow_up_questions:
+        st.markdown("#### Explore further")
+        for index, followup in enumerate(result.follow_up_questions):
+            st.button(followup, key=f"followup_{index}", on_click=set_question, args=(followup,))
 
-    if result.numeric_claims:
-        counts = {status: sum(claim.status == status for claim in result.numeric_claims) for status in ("verified", "ambiguous", "unsupported")}
-        st.markdown("#### Numerical claim checks")
-        summary_cols = st.columns(3)
-        summary_cols[0].metric("Verified", counts["verified"])
-        summary_cols[1].metric("Ambiguous", counts["ambiguous"])
-        summary_cols[2].metric("Unsupported", counts["unsupported"])
-        for claim in result.numeric_claims:
-            support = ", ".join(claim.supporting_evidence_ids) or "No matching evidence"
-            st.markdown(
-                f'<span class="badge badge-{claim.status}">{claim.status.upper()}</span> **{html.escape(claim.original)}** · {support}',
-                unsafe_allow_html=True,
-            )
-            st.caption(claim.reason)
-        st.caption("Verified means the value and nearby metric match the selected evidence; it is not independent factual proof.")
+with sources_tab:
+    st.caption("These are the page passages supplied to the answer model, including surrounding context. Images load only when requested.")
+    if result.evidence:
+        by_id = {item.evidence_id: item for item in result.evidence}
+        selected_eid = st.selectbox("Inspect a source", list(by_id), format_func=lambda eid: f"{eid} · {by_id[eid].chunk.document_name} · page {by_id[eid].chunk.page_number}")
+        item = by_id[selected_eid]
+        text_col, preview_col = st.columns([1.15, 1])
+        with text_col:
+            st.markdown(f"**{item.chunk.modality.title()} · PDF page {item.chunk.page_number}**")
+            st.markdown(item.context_text or item.chunk.text)
+        with preview_col:
+            if st.button("Show this page", key=f"preview_{selected_eid}"):
+                st.session_state["preview_source"] = selected_eid
+            if st.session_state.get("preview_source") == selected_eid:
+                page_image = pipeline.render_evidence_page(item)
+                if page_image:
+                    st.image(page_image, caption=f"PDF page {item.chunk.page_number}")
 
-    used = set(result.used_evidence_ids)
-    st.markdown('<div class="section-label">Source trail</div>', unsafe_allow_html=True)
-    st.subheader("Evidence behind the answer")
-    st.caption("Open a source to inspect the exact retrieved passage or table. Answer-used evidence opens first.")
-    ordered_evidence = sorted(result.evidence, key=lambda item: item.evidence_id not in used)
-    for item in ordered_evidence:
-        chunk = item.chunk
-        st.markdown(f'<div id="{item.evidence_id.lower()}"></div>', unsafe_allow_html=True)
-        used_marker = " · used in answer" if item.evidence_id in used else ""
-        label = f"[{item.evidence_id}] {chunk.document_name} · page {chunk.page_number} · {chunk.modality}{used_marker}"
-        with st.expander(label, expanded=item.evidence_id in used):
-            st.markdown(f'<span class="badge badge-{chunk.modality}">{chunk.modality.upper()}</span>', unsafe_allow_html=True)
-            st.markdown(chunk.text)
-            if show_previews:
-                image = pipeline.render_evidence_page(item)
-                if image:
-                    st.image(image, caption=f"{chunk.document_name} · PDF page {chunk.page_number}")
-            with st.expander("Retrieval details"):
-                st.caption(
-                    f"Dense {item.dense_score:.3f} · lexical {item.lexical_score:.3f} · fusion {item.fusion_score:.4f} · reranker {item.reranker_score:.3f}"
-                )
+with checks_tab:
+    st.caption("Checks match values, units, nearby metric words, and source references. They do not independently establish truth. Image-only observations require visual review.")
+    cols = st.columns(3)
+    for col, state in zip(cols, ("verified", "ambiguous", "unsupported")):
+        col.metric(state.title(), sum(claim.status == state for claim in result.numeric_claims))
+    if not result.numeric_claims:
+        st.info("No quantitative claims were extracted from this answer.")
+    for claim in result.numeric_claims:
+        with st.expander(f"{claim.status.upper()} · {claim.original}"):
+            st.write(claim.reason)
+            st.caption("Supporting sources: " + (", ".join(claim.supporting_evidence_ids) or "none"))
+    st.metric("Passages with citations", f"{result.citation_coverage:.0%}")
+    st.caption("Citation presence is a formatting check, not a claim-entailment score.")
 
-    with st.expander("Performance details"):
-        st.json({key: round(value, 3) for key, value in result.timings.items()})
+with research_tab:
+    st.markdown("#### Questions searched")
+    for query in result.research_queries:
+        st.write(f"• {query}")
+    if result.outline:
+        st.markdown("#### Writing outline")
+        for section in result.outline:
+            st.write(f"• {section}")
+    st.caption("Search → hybrid ranking → page diversity → surrounding context → synthesis → citation and numeric checks")
+    st.json({name: round(value, 3) for name, value in result.timings.items()})

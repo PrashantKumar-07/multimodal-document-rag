@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.pipeline import DocumentRAGPipeline  # noqa: E402
+from src.catalog import discover_models, inspect_ollama  # noqa: E402
 from src.providers import OpenAICompatibleProvider, ProviderConfig  # noqa: E402
 from src.samples import download_sample, load_manifest  # noqa: E402
 from src.text_utils import decimal_key, extract_numeric_spans, parse_decimal_token  # noqa: E402
@@ -18,7 +19,7 @@ from src.text_utils import decimal_key, extract_numeric_spans, parse_decimal_tok
 
 def args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the curated retrieval and optional answer evaluation.")
-    parser.add_argument("--provider", choices=["none", "OpenRouter", "Ollama", "OpenAI"], default="none")
+    parser.add_argument("--provider", choices=["none", "OpenRouter", "Ollama", "Claude", "OpenAI"], default="none")
     parser.add_argument("--model", default=None)
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args()
@@ -30,9 +31,24 @@ def provider_from_environment(name: str, model: str | None) -> OpenAICompatibleP
     key = {
         "OpenRouter": os.environ.get("OPENROUTER_API_KEY", ""),
         "OpenAI": os.environ.get("OPENAI_API_KEY", ""),
+        "Claude": os.environ.get("ANTHROPIC_API_KEY", ""),
         "Ollama": "ollama",
     }[name]
-    return OpenAICompatibleProvider(ProviderConfig.for_provider(name, api_key=key, model=model))
+    kwargs = {}
+    if name == "Ollama":
+        if not model:
+            available = discover_models("Ollama")
+            if not available:
+                raise ValueError("Install an Ollama model before running live evaluation.")
+            model = available[0].id
+        info = inspect_ollama(model, "http://localhost:11434/v1")
+        kwargs = {"supports_images": info.vision, "context_length": info.context_length}
+    elif name == "OpenRouter" and model:
+        info = next((x for x in discover_models(name) if x.id == model), None)
+        if info:
+            kwargs = {"supports_images": info.vision, "context_length": min(info.context_length, 32768),
+                      "disable_reasoning": info.disable_reasoning, "json_output": info.json_output}
+    return OpenAICompatibleProvider(ProviderConfig.for_provider(name, api_key=key, model=model, **kwargs))
 
 
 def main() -> None:
@@ -48,7 +64,7 @@ def main() -> None:
     }
 
     report: dict[str, object] = {"retrieval": {}, "answers": None}
-    for mode in ("dense", "hybrid", "hybrid_rerank"):
+    for mode in ("dense", "hybrid", "hybrid_rerank", "expanded_context"):
         reciprocal_ranks: list[float] = []
         hits: list[float] = []
         latencies: list[float] = []
@@ -57,10 +73,15 @@ def main() -> None:
             if not question["answerable"]:
                 continue
             expected_document = document_ids[question["document_id"]]
-            evidence, timings = pipeline.retrieve(
-                question["question"], mode=mode, document_ids={expected_document}
-            )
-            latencies.append(timings["total_retrieval_seconds"])
+            if mode == "expanded_context":
+                result = pipeline.answer(question["question"], document_ids={expected_document})
+                evidence, timings = result.evidence, result.timings
+                latencies.append(timings["research_seconds"])
+            else:
+                evidence, timings = pipeline.retrieve(
+                    question["question"], mode=mode, document_ids={expected_document}
+                )
+                latencies.append(timings["total_retrieval_seconds"])
             matching_ranks = [
                 rank
                 for rank, item in enumerate(evidence[:5], start=1)
@@ -74,7 +95,7 @@ def main() -> None:
                 retrieved_numbers = {
                     decimal_key(value)
                     for item in evidence[:5]
-                    for _, value, _, _ in extract_numeric_spans(item.chunk.text)
+                    for _, value, _, _ in extract_numeric_spans(item.context_text or item.chunk.text)
                 }
                 numeric_coverages.append(float(expected_numbers <= retrieved_numbers))
         report["retrieval"][mode] = {
@@ -91,13 +112,17 @@ def main() -> None:
         refusal_hits: list[float] = []
         unsupported = 0
         total_claims = 0
+        successful = 0
+        actual_models = set()
         for question in questions:
             expected_document = document_ids[question["document_id"]]
             result = pipeline.answer(
                 question["question"], provider, document_ids={expected_document}
             )
+            successful += int(result.generation_succeeded)
+            actual_models.add(result.model)
             if not question["answerable"]:
-                refusal_hits.append(float(result.insufficient_evidence))
+                refusal_hits.append(float(result.generation_succeeded and result.insufficient_evidence))
                 continue
             cited = [item for item in result.evidence if item.evidence_id in result.used_evidence_ids]
             citation_hits.append(
@@ -120,6 +145,9 @@ def main() -> None:
         report["answers"] = {
             "provider": provider.config.name,
             "model": provider.config.model,
+            "actual_models": sorted(actual_models),
+            "successful_generations": successful,
+            "total_questions": len(questions),
             "numeric_exact_match": statistics.fmean(correct_numbers) if correct_numbers else None,
             "citation_page_accuracy": statistics.fmean(citation_hits),
             "unanswerable_refusal_accuracy": statistics.fmean(refusal_hits),

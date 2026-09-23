@@ -1,9 +1,10 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.14.0+cpu
-streamlit>=1.44,<2
+streamlit>=1.64,<2
 PyMuPDF>=1.24,<2
 sentence-transformers>=3.4,<6
 rank-bm25>=0.2.2,<0.3
 openai>=1.68,<3
 numpy>=1.26,<3
+threadpoolctl>=3.1,<4
 requests>=2.32,<3
