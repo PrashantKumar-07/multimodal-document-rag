@@ -4,27 +4,21 @@ A document research workspace that turns digitally generated PDFs into cited exp
 
 There is deliberately no product or brand name. The repository describes what the application does.
 
-**New here?** Read the [complete project guide](PROJECT_GUIDE.md) for the problem statement, end-to-end architecture, retrieval and verification algorithms, provider trade-offs, evaluation interpretation, limitations, and portfolio/resume-ready explanations. This README focuses on running and evaluating the code.
-
 ## What it demonstrates
 
 - Layout-aware PDF extraction with table structure and page provenance.
 - Local BM25 plus dense retrieval, weighted reciprocal-rank fusion, and cross-encoder reranking.
 - Query-time page rendering for chart and figure questions rather than expensive image preprocessing of every page.
-- Curated OpenRouter models, installed-model discovery for Ollama, and Claude Messages support.
+- Live free-model discovery for OpenRouter and OpenCode, NVIDIA model discovery, and installed-model discovery for Ollama.
 - OpenAI-compatible hosted generation, plus native Ollama context-window and structured-output controls.
 - Multi-query retrieval with query coverage, page diversity, parent-page context, and verbatim focus passages.
-- Research planning, an outline, structured synthesis, and deterministic citation checks without a hidden rewrite.
+- Optional research planning, an outline, structured synthesis, and a bounded citation/schema correction pass.
 - Inline evidence IDs, rendered source pages, and conservative numeric verification.
 - An explicit active-document scope, so phrases such as “this paper” cannot silently pull an answer from another uploaded PDF.
 - Evidence-only operation when no generation provider is configured.
 - A 16-question finance/science evaluation with dense, hybrid, and reranked retrieval ablations.
 
 The included samples are Apple's FY2025 Q4 financial statements and the paper *Training Compute-Optimal Large Language Models*. The live regression script additionally downloads *Efficient Streaming Language Models with Attention Sinks*. Results on these few documents are not a general accuracy guarantee.
-
-### Current measured result
-
-On the **12 answerable questions** in the curated 16-question set, scoped to the expected document, all four tested retrieval configurations found the gold page within five results. BM25 + dense RRF achieved **0.903 MRR@5** and **87.5% numeric evidence coverage** at **0.012 s median warm retrieval time** in the recorded CPU run. The Detailed pipeline increased numeric evidence coverage to **100%** but took **1.057 s** median; cross-encoder reranking did not improve MRR on this small set. These are retrieval-only, host-specific measurements, **not answer-accuracy or latency guarantees**. See [EVALUATION.md](EVALUATION.md) for the full ablation and limitations.
 
 ## Architecture
 
@@ -39,7 +33,7 @@ PDF bytes
   -> per-query fusion + diverse page selection
   -> parent-page context + verbatim focus passages (bounded word budget)
   -> structured explanation/report + at most two page images for vision models
-  -> retain streamed draft (including readable incomplete output with warnings)
+  -> bounded citation/schema correction when needed
   -> value/unit/context/citation checks
   -> answer / sources / checks / research trail + Markdown export
 ```
@@ -50,11 +44,11 @@ When several PDFs are indexed, the most recently added document becomes the acti
 
 ### Answer modes
 
-| Mode | Intended use | Maximum generation calls |
-|---|---|---:|
-| Quick | A specific fact and its qualification | 1 |
-| Detailed | Direct answer plus distinct explanatory sections | 1 |
-| Research report | Subquestions, outline, findings, method, evidence, limitations | 2: planning and writing; no hidden rewrite |
+| Mode            | Intended use                                                   |                  Maximum generation calls |
+| --------------- | -------------------------------------------------------------- | ----------------------------------------: |
+| Quick           | A specific fact and its qualification                          |                                         1 |
+| Detailed        | Direct answer plus distinct explanatory sections               |                                         1 |
+| Research report | Subquestions, outline, findings, method, evidence, limitations | 3: planning, writing, optional correction |
 
 Length targets are instructions, not quality guarantees. A refusal should remain short. Sources and page previews are separate from the answer, and only a requested preview is rendered in the UI.
 
@@ -78,24 +72,21 @@ Automatic file watching is disabled: scanning Transformers' lazy modules caused 
 
 ### Provider choices
 
-| Provider | Default model | Setup | Notes |
-|---|---|---|---|
-| OpenRouter | UI prefers `dots-studio/dots-3-note-preview:free` when listed; adapter fallback is `openrouter/free` | Paste an OpenRouter key in the UI | Dots completed live text/research requests; Nex Mini is a tested faster alternative. Free availability and latency vary. |
-| Claude | `claude-haiku-4-5` | Paste an Anthropic key | Native Messages protocol; billed API, no live key supplied for testing. |
-| Ollama | Selected from installed models | Start Ollama, select an installed model | Native API explicitly configures context and JSON schema; text-only models do not receive images. |
-| OpenAI | `gpt-5-mini` | Paste an OpenAI key in the UI | Optional paid quality benchmark. |
+| Provider   | Default model                                                                                           | Setup                                   | Notes                                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| OpenRouter | UI prefers`dots-studio/dots-3-note-preview:free` when listed; adapter fallback is `openrouter/free` | Paste an OpenRouter key in the UI       | Dots completed live text/research requests; Nex Mini is a tested faster alternative. Free availability and latency vary. |
+| OpenCode   | `big-pickle` initially; refresh for available free models                                             | Paste a Zen key                         | Only Chat Completions-compatible free families are listed.                                                               |
+| NVIDIA     | `nvidia/nemotron-3.5-lightning-30b-a3b`                                                               | Paste an NVIDIA key                     | Account/model access varies; the tested request timed out. Not a validated default.                                      |
+| Ollama     | Selected from installed models                                                                          | Start Ollama, select an installed model | Native API explicitly configures context and JSON schema; text-only models do not receive images.                        |
+| OpenAI     | `gpt-5-mini`                                                                                          | Paste an OpenAI key in the UI           | Optional paid quality benchmark.                                                                                         |
 
-Keys entered in the UI stay in Streamlit session state and are not written by the application. Environment variables `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, and `OPENAI_API_KEY` are also recognized for local development. Copy `.env.example` only as a reference; this application does not automatically load `.env` files.
+Keys entered in the UI stay in Streamlit session state and are not written by the application. Environment variables `OPENROUTER_API_KEY`, `OPENCODE_API_KEY`, `NVIDIA_API_KEY`, and `OPENAI_API_KEY` are also recognized for local development. Copy `.env.example` only as a reference; this application does not automatically load `.env` files.
 
 Use **Refresh available models** and **Test connection** before testing answers. Select `openrouter/free` explicitly if you want dynamic routing rather than a pinned model. A missing Ollama model now produces an installation hint rather than a failed question. To add vision locally, install an appropriate vision model yourself (for example `ollama pull qwen3-vl:8b`) and refresh; the app does not start multi-gigabyte downloads automatically. Installed does not mean accurate: the tested older Mistral model returned plausible but incorrect explanations.
 
-[Claude Messages](https://platform.claude.com/docs/en/api/messages/create) has native wire-format support. [Ollama's native API](https://docs.ollama.com/api/chat) supplies local context and structured-output controls.
+[OpenCode documents multiple endpoint protocols and free-model data policies](https://opencode.ai/docs/zen/); the app excludes free models requiring Responses or SystemOne from its Chat Completions adapter. Some free endpoints may use submitted data for model improvement. [Ollama&#39;s native API](https://docs.ollama.com/api/chat) supplies the context and structured-output controls required for local generation.
 
-Ollama is the UI default. OpenCode and AgentRouter were removed at the user's request after access checks failed. Other OpenRouter models are hidden behind an explicit untested-model option. Connection tests send one tiny request with an 8-second network timeout and no retries; they still consume provider quota. A timeout is not proof of an invalid key, and changing models does not reset account-wide quota.
-
-The final answer uses the same renderer as the streamed draft. Research mode does not perform a second rewrite, and every generated section remains in the answer, including repeated sections. Malformed JSON or interrupted streams retain readable content with an unverified/incomplete warning rather than replacing it with an empty error card. The answer card grows with its content; scroll the page to read the full report. This preserves text, not factual correctness.
-
-OpenAI's official model reference confirms that `gpt-5-mini` accepts image input and supports Chat Completions: <https://developers.openai.com/api/docs/models/gpt-5-mini>.
+OpenAI's official model reference confirms that `gpt-5-mini` accepts image input and supports Chat Completions: [https://developers.openai.com/api/docs/models/gpt-5-mini](https://developers.openai.com/api/docs/models/gpt-5-mini).
 
 ## Evaluation
 
@@ -123,6 +114,7 @@ Run the live StreamingLLM regression (a Chinchilla distractor is indexed alongsi
 python scripts/live_quality_check.py --provider Ollama --model mistral:latest
 # With the corresponding key already set in your environment:
 python scripts/live_quality_check.py --provider OpenRouter --model openrouter/free
+python scripts/live_quality_check.py --provider OpenCode --model big-pickle
 ```
 
 Optional real-browser validation (requires the public StreamingLLM PDF downloaded by the live check):
@@ -150,7 +142,7 @@ pytest -q
 1. Push this directory to a public GitHub repository.
 2. In Streamlit Community Cloud, create an app from the repository and select `app.py`.
 3. Do not add a shared API key; the deployed UI is bring-your-own-key and works in evidence-only mode without one.
-4. Ollama is local-only unless you deliberately expose a compatible remote endpoint. The hosted demo should use OpenRouter, Claude, or OpenAI.
+4. Ollama is local-only unless you deliberately expose a compatible remote endpoint. The hosted demo should use OpenRouter, OpenCode, or OpenAI.
 
 Raw uploaded PDF bytes are held in the active Streamlit session and are not written to disk. Extracted text, table records, and embeddings are written under the gitignored `cache/` directory; on Streamlit Community Cloud that storage is ephemeral. Operators handling sensitive documents should disable or routinely clear this cache.
 
